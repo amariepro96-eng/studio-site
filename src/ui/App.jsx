@@ -85,6 +85,7 @@ function Generating({ progress, onCancel, name, source }) {
           <li key={id} className={`gen-item ${progress[id] || 'pending'}`}>
             <span className="gen-dot" aria-hidden="true" />
             {label}
+            {progress[id] === 'retrying' && <span className="gen-note">Nouvelle tentative…</span>}
             <span className="sr-only">{progress[id] === 'done' ? ' : terminé' : progress[id] === 'failed' ? ' : échec' : ' : en cours'}</span>
           </li>
         ))}

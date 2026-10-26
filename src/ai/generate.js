@@ -10,6 +10,33 @@ export class GenerationError extends Error {
   }
 }
 
+// Erreurs qu'une nouvelle tentative ne corrigera pas
+const NO_RETRY = new Set(['auth', 'credit', 'workspace', 'model', 'no_key', 'bad_request', 'cancelled', 'not_granted', 'sampling_disabled', 'refused', 'prompt_too_large', 'capability_disabled', 'capability_removed', 'session_expired', 'not_declared']);
+const RETRY_DELAYS = [6000, 18000];
+
+function wait(ms, signal) {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(resolve, ms);
+    signal?.addEventListener?.('abort', () => {
+      clearTimeout(t);
+      reject(new GenerationError('Génération annulée.', 'cancelled'));
+    });
+  });
+}
+
+// Relance automatique en cas d'erreur passagère (limite de débit, surcharge, réponse incomplète)
+async function withRetry(fn, { signal, onRetry } = {}) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fn();
+    } catch (e) {
+      if (signal?.aborted || NO_RETRY.has(e?.code) || attempt >= RETRY_DELAYS.length) throw e;
+      onRetry?.(attempt + 1, e);
+      await wait(RETRY_DELAYS[attempt], signal);
+    }
+  }
+}
+
 const PART_LABELS = {
   concepts: 'les directions artistiques',
   core: 'les textes principaux',
@@ -31,7 +58,7 @@ export async function generateSite(brief, runner, { onPart, signal } = {}) {
     PARTS.map(async (part) => {
       onPart?.(part, 'running');
       try {
-        const data = await runner(part, brief, signal);
+        const data = await withRetry(() => runner(part, brief, signal), { signal, onRetry: () => onPart?.(part, 'retrying') });
         onPart?.(part, 'done');
         return data;
       } catch (e) {
@@ -51,7 +78,11 @@ export async function generateSite(brief, runner, { onPart, signal } = {}) {
     throw new GenerationError(first?.message || 'L’IA n’a pas répondu.', first?.code || 'failed');
   }
 
-  const warnings = failed.map((f) => `L’IA n’a pas pu rédiger ${PART_LABELS[f.part]} : des textes génériques les remplacent. Relancez la génération pour réessayer.`);
+  const warnings = failed.map((f) => {
+    const why = f.error?.message ? ` Cause : ${String(f.error.message).replace(/\s*\.$/, '')}.` : '';
+    const retry = /relancez/i.test(why) ? '' : ' Relancez la génération pour réessayer.';
+    return `L’IA n’a pas pu rédiger ${PART_LABELS[f.part]} : des textes génériques les remplacent.${why}${retry}`;
+  });
 
   return {
     content: normalizeContent(core, pages, brief),
@@ -75,7 +106,11 @@ export function apiRunner(base = '') {
       json = await res.json();
     } catch {}
     if (!res.ok || !json || json.error) {
-      throw new GenerationError(json?.error || `Le serveur a répondu ${res.status}.`, json?.code || 'server');
+      const timeout = res.status === 504 || res.status === 408;
+      throw new GenerationError(
+        json?.error || (timeout ? 'Le serveur a mis trop de temps à répondre.' : `Le serveur a répondu ${res.status}.`),
+        json?.code || (timeout ? 'timeout' : 'server')
+      );
     }
     return json.data;
   };

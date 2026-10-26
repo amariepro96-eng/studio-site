@@ -170,6 +170,7 @@ html, body { margin: 0; background: #f3f4f6; }
 .gen-item.done .gen-dot { animation: none; border: 0; background: var(--ok); box-shadow: inset 0 0 0 4px var(--ok), inset 0 0 0 9px #fff; }
 .gen-item.failed .gen-dot { animation: none; border: 0; background: var(--danger); }
 .gen-item.done { color: var(--muted); }
+.gen-note { margin-left: auto; font-size: 0.86rem; color: var(--warn); font-weight: 600; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* Galerie */

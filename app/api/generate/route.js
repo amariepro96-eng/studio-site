@@ -32,7 +32,12 @@ export async function POST(req) {
   }
 
   const prompt = buildPrompt(part, brief);
-  const client = new Anthropic({ apiKey: cfg.apiKey, ...(cfg.workspaceId ? { defaultHeaders: { 'anthropic-workspace-id': cfg.workspaceId } } : {}) });
+  const client = new Anthropic({
+    apiKey: cfg.apiKey,
+    maxRetries: 2,
+    timeout: 55_000,
+    ...(cfg.workspaceId ? { defaultHeaders: { 'anthropic-workspace-id': cfg.workspaceId } } : {}),
+  });
   try {
     const msg = await client.messages.create({
       model: cfg.model,
@@ -44,19 +49,22 @@ export async function POST(req) {
       .filter((b) => b.type === 'text')
       .map((b) => b.text)
       .join('');
+    if (msg.stop_reason === 'max_tokens') console.warn('[generate]', part, 'réponse coupée (max_tokens)');
     const data = parseJsonLoose(text);
     return Response.json({ data });
   } catch (e) {
     const status = e?.status;
     const message = String(e?.message || '');
+    // Trace complète dans les journaux Vercel (onglet Logs)
+    console.error('[generate]', part, status || '-', message.slice(0, 400));
     if (/workspace/i.test(message)) return fail(502, 'La clé Claude n’est rattachée à aucun workspace. Recréez-la en choisissant un workspace, ou ajoutez ANTHROPIC_WORKSPACE_ID dans Vercel.', 'workspace');
     if (status === 401) return fail(502, 'La clé API a été refusée par Anthropic. Vérifiez ANTHROPIC_API_KEY.', 'auth');
     if (status === 400 && /credit|balance|billing/i.test(message)) return fail(402, 'Le crédit de votre compte API Anthropic est épuisé. Rechargez-le sur platform.claude.com (Billing).', 'credit');
     if (status === 404) return fail(502, `Le modèle « ${cfg.model} » est introuvable. Vérifiez la variable CLAUDE_MODEL.`, 'model');
     if (status === 429) return fail(429, 'Limite de l’API atteinte. Patientez une minute puis relancez.', 'rate_limited');
     if (status === 529 || status === 503) return fail(503, 'Le service IA est momentanément surchargé. Relancez dans quelques instants.', 'overloaded');
+    if (/timed? ?out|timeout/i.test(message)) return fail(504, 'L’IA a mis trop de temps à répondre.', 'timeout');
     if (/JSON/i.test(message)) return fail(502, 'La réponse de l’IA était incomplète. Relancez la génération.', 'invalid_json');
-    console.error('[generate]', part, status, message);
     return fail(500, 'La génération a échoué. Relancez dans quelques instants.', 'failed');
   }
 }
