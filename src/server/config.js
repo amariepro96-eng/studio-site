@@ -8,7 +8,9 @@ export function config() {
     apiKey: (process.env.ANTHROPIC_API_KEY || '').trim(),
     // Nécessaire seulement si la clé Claude n'est rattachée à aucun workspace
     workspaceId: (process.env.ANTHROPIC_WORKSPACE_ID || '').trim(),
-    model: process.env.CLAUDE_MODEL || DEFAULT_MODEL,
+    model: (process.env.CLAUDE_MODEL || DEFAULT_MODEL).trim(),
+    // Niveau d'effort de Claude (low, medium, high) ; « auto » laisse le réglage du modèle
+    effort: ['low', 'medium', 'high'].includes((process.env.AI_EFFORT || 'medium').trim()) ? (process.env.AI_EFFORT || 'medium').trim() : '',
     unsplashKey: process.env.UNSPLASH_ACCESS_KEY || '',
     geminiKey: (process.env.GEMINI_API_KEY || '').trim(),
     // Modèle d'image Gemini (« Nano Banana »). Liste à jour : ai.google.dev/gemini-api/docs/image-generation
@@ -16,7 +18,7 @@ export function config() {
     imagesPerHour: Math.max(1, parseInt(process.env.IMAGES_PER_HOUR || '80', 10) || 80),
     agencyPassword: process.env.AGENCY_PASSWORD || '',
     // Nombre de générations complètes autorisées par visiteur et par heure
-    generationsPerHour: Math.max(1, parseInt(process.env.GENERATIONS_PER_HOUR || '10', 10) || 10),
+    generationsPerHour: Math.max(1, parseInt(process.env.GENERATIONS_PER_HOUR || '20', 10) || 20),
   };
 }
 

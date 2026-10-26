@@ -136,11 +136,11 @@ export const PARTS = ['concepts', 'core', 'pages'];
 export function buildPrompt(part, brief) {
   switch (part) {
     case 'concepts':
-      return { system: SYSTEM, user: conceptsPrompt(brief), maxTokens: 2500 };
+      return { system: SYSTEM, user: conceptsPrompt(brief), maxTokens: 16000 };
     case 'core':
-      return { system: SYSTEM, user: corePrompt(brief), maxTokens: 4500 };
+      return { system: SYSTEM, user: corePrompt(brief), maxTokens: 16000 };
     case 'pages':
-      return { system: SYSTEM, user: pagesPrompt(brief), maxTokens: 2500 };
+      return { system: SYSTEM, user: pagesPrompt(brief), maxTokens: 16000 };
     default:
       throw new Error('Partie inconnue : ' + part);
   }

@@ -1,18 +1,30 @@
-// Orchestration de la génération : 3 demandes en parallèle à l'IA,
-// puis nettoyage des réponses. Sans IA, on bascule sur les contenus de démonstration.
+// Orchestration de la génération, en 3 étapes successives :
+//   1. choix des 10 directions artistiques
+//   2. rédaction des textes principaux
+//   3. préparation des pages secondaires
+// Chaque réponse est contrôlée ; une réponse incomplète ou en échec est redemandée.
+// Avec l'IA branchée, aucun texte générique ne remplace jamais une réponse manquante.
 import { PARTS } from '../engine/prompts.js';
+import { validatePart } from '../engine/validate.js';
 import { demoContent, demoConcepts, normalizeConcepts, normalizeContent, conceptsToModels } from '../engine/content.js';
 
 export class GenerationError extends Error {
-  constructor(message, code) {
+  constructor(message, code, part) {
     super(message);
     this.code = code;
+    this.part = part;
   }
 }
 
+export const PART_LABELS = {
+  concepts: 'Choix des 10 directions artistiques',
+  core: 'Rédaction des textes principaux',
+  pages: 'Préparation des pages secondaires',
+};
+
 // Erreurs qu'une nouvelle tentative ne corrigera pas
-const NO_RETRY = new Set(['auth', 'credit', 'workspace', 'model', 'no_key', 'bad_request', 'cancelled', 'not_granted', 'sampling_disabled', 'refused', 'prompt_too_large', 'capability_disabled', 'capability_removed', 'session_expired', 'not_declared']);
-const RETRY_DELAYS = [6000, 18000];
+const NO_RETRY = new Set(['auth', 'credit', 'workspace', 'model', 'no_key', 'bad_request', 'cancelled', 'not_granted', 'sampling_disabled', 'refused', 'prompt_too_large', 'capability_disabled', 'capability_removed', 'session_expired', 'not_declared', 'too_many', 'api_400']);
+const RETRY_DELAYS = [4000, 12000, 30000];
 
 function wait(ms, signal) {
   return new Promise((resolve, reject) => {
@@ -24,11 +36,11 @@ function wait(ms, signal) {
   });
 }
 
-// Relance automatique en cas d'erreur passagère (limite de débit, surcharge, réponse incomplète)
+// Relance automatique : limite de débit, surcharge, délai dépassé, réponse incomplète
 async function withRetry(fn, { signal, onRetry } = {}) {
   for (let attempt = 0; ; attempt++) {
     try {
-      return await fn();
+      return await fn(attempt);
     } catch (e) {
       if (signal?.aborted || NO_RETRY.has(e?.code) || attempt >= RETRY_DELAYS.length) throw e;
       onRetry?.(attempt + 1, e);
@@ -37,70 +49,71 @@ async function withRetry(fn, { signal, onRetry } = {}) {
   }
 }
 
-const PART_LABELS = {
-  concepts: 'les directions artistiques',
-  core: 'les textes principaux',
-  pages: 'les pages secondaires',
-};
+async function runStep(part, brief, runner, { signal, onPart }) {
+  onPart?.(part, 'running');
+  try {
+    const data = await withRetry(
+      async (attempt) => {
+        const out = await runner(part, brief, signal, { retry: attempt > 0 });
+        const problems = validatePart(part, out, brief);
+        if (problems.length) throw new GenerationError(`La réponse de l’IA était incomplète (${problems.join(' ; ')}).`, 'incomplete', part);
+        return out;
+      },
+      { signal, onRetry: () => onPart?.(part, 'retrying') }
+    );
+    onPart?.(part, 'done');
+    return data;
+  } catch (e) {
+    onPart?.(part, signal?.aborted ? 'pending' : 'failed');
+    if (e instanceof GenerationError) {
+      e.part = part;
+      throw e;
+    }
+    throw new GenerationError(e?.message || 'L’IA n’a pas répondu.', e?.code || 'failed', part);
+  }
+}
 
-export async function generateSite(brief, runner, { onPart, signal } = {}) {
+// `done` : résultats déjà obtenus (pour reprendre à l'étape qui a échoué)
+export async function generateSite(brief, runner, { onPart, signal, done = {} } = {}) {
   if (!runner) {
     for (const p of PARTS) onPart?.(p, 'done');
-    return {
-      content: demoContent(brief),
-      models: conceptsToModels(demoConcepts(brief)),
-      source: 'demo',
-      warnings: [],
-    };
+    return { content: demoContent(brief), models: conceptsToModels(demoConcepts(brief)), source: 'demo', warnings: [] };
   }
-
-  const settled = await Promise.allSettled(
-    PARTS.map(async (part) => {
-      onPart?.(part, 'running');
-      try {
-        const data = await withRetry(() => runner(part, brief, signal), { signal, onRetry: () => onPart?.(part, 'retrying') });
-        onPart?.(part, 'done');
-        return data;
-      } catch (e) {
-        onPart?.(part, 'failed');
-        throw e;
-      }
-    })
-  );
-
-  if (signal?.aborted) throw new GenerationError('Génération annulée.', 'cancelled');
-
-  const [concepts, core, pages] = settled.map((s) => (s.status === 'fulfilled' ? s.value : null));
-  const failed = settled.map((s, i) => (s.status === 'rejected' ? { part: PARTS[i], error: s.reason } : null)).filter(Boolean);
-
-  if (failed.length === PARTS.length) {
-    const first = failed[0].error;
-    throw new GenerationError(first?.message || 'L’IA n’a pas répondu.', first?.code || 'failed');
+  const results = { ...done };
+  for (const p of PARTS) if (results[p]) onPart?.(p, 'done');
+  for (const part of PARTS) {
+    if (results[part]) continue;
+    if (signal?.aborted) throw new GenerationError('Génération annulée.', 'cancelled', part);
+    try {
+      results[part] = await runStep(part, brief, runner, { signal, onPart });
+    } catch (e) {
+      e.partial = results;
+      throw e;
+    }
   }
-
-  const warnings = failed.map((f) => {
-    const why = f.error?.message ? ` Cause : ${String(f.error.message).replace(/\s*\.$/, '')}.` : '';
-    const retry = /relancez/i.test(why) ? '' : ' Relancez la génération pour réessayer.';
-    return `L’IA n’a pas pu rédiger ${PART_LABELS[f.part]} : des textes génériques les remplacent.${why}${retry}`;
-  });
-
   return {
-    content: normalizeContent(core, pages, brief),
-    models: conceptsToModels(normalizeConcepts(concepts, brief)),
+    content: normalizeContent(results.core, results.pages, brief),
+    models: conceptsToModels(normalizeConcepts(results.concepts, brief)),
     source: 'ai',
-    warnings,
+    warnings: [],
   };
 }
 
 // Appel au serveur Next.js (clé API gardée côté serveur)
 export function apiRunner(base = '') {
-  return async (part, brief, signal) => {
-    const res = await fetch(`${base}/api/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ part, brief }),
-      signal,
-    });
+  return async (part, brief, signal, { retry = false } = {}) => {
+    let res;
+    try {
+      res = await fetch(`${base}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ part, brief, retry }),
+        signal,
+      });
+    } catch (e) {
+      if (signal?.aborted) throw new GenerationError('Génération annulée.', 'cancelled', part);
+      throw new GenerationError('Connexion au serveur impossible. Vérifiez votre réseau.', 'network', part);
+    }
     let json = null;
     try {
       json = await res.json();
@@ -109,7 +122,8 @@ export function apiRunner(base = '') {
       const timeout = res.status === 504 || res.status === 408;
       throw new GenerationError(
         json?.error || (timeout ? 'Le serveur a mis trop de temps à répondre.' : `Le serveur a répondu ${res.status}.`),
-        json?.code || (timeout ? 'timeout' : 'server')
+        json?.code || (timeout ? 'timeout' : 'server'),
+        part
       );
     }
     return json.data;

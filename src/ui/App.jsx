@@ -4,7 +4,8 @@ import { emptyBrief, STEPS } from '../engine/questions.js';
 import { ARCHETYPE_MAP } from '../engine/archetypes.js';
 import { renderPage, sitePages, resolveModel } from '../engine/render.js';
 import { buildZip, zipName } from '../engine/zip.js';
-import { generateSite } from '../ai/generate.js';
+import { generateSite, PART_LABELS } from '../ai/generate.js';
+import { PARTS } from '../engine/prompts.js';
 import { aiImagesNeeded, generateImages } from '../ai/images.js';
 import { ClientStepper, AgencyForm } from './Questionnaire.jsx';
 import { ThumbFrame, DeviceFrame, DeviceToggle, PageTabs } from './Frames.jsx';
@@ -63,36 +64,60 @@ function Header({ mode, appName, modeSwitch, onHome }) {
   );
 }
 
-// ---------- Génération en cours ----------
-const PART_LABELS = [
-  ['concepts', 'Choix des 10 directions artistiques'],
-  ['core', 'Rédaction des textes principaux'],
-  ['pages', 'Préparation des pages secondaires'],
-];
+// ---------- Génération en cours (3 étapes successives) ----------
+const STATE_TEXT = { done: 'terminé', failed: 'échec', running: 'en cours', retrying: 'nouvelle tentative', pending: 'en attente' };
 
-function Generating({ progress, onCancel, name, source }) {
+function Generating({ progress, onCancel, name, source, failure, onResume, onEdit }) {
   return (
     <div className="generating">
-      <div className="gen-visual" aria-hidden="true">
+      <div className={`gen-visual${failure ? ' stopped' : ''}`} aria-hidden="true">
         {Array.from({ length: 10 }).map((_, i) => (
           <span key={i} style={{ animationDelay: `${i * 0.12}s` }} />
         ))}
       </div>
-      <h1>Nous préparons 10 propositions pour {name || 'votre site'}</h1>
-      <p className="muted">{source === 'ai' ? 'Cela prend en général entre 30 secondes et une minute.' : 'Quelques secondes suffisent.'}</p>
-      <ul className="gen-list" aria-live="polite">
-        {PART_LABELS.map(([id, label]) => (
-          <li key={id} className={`gen-item ${progress[id] || 'pending'}`}>
-            <span className="gen-dot" aria-hidden="true" />
-            {label}
-            {progress[id] === 'retrying' && <span className="gen-note">Nouvelle tentative…</span>}
-            <span className="sr-only">{progress[id] === 'done' ? ' : terminé' : progress[id] === 'failed' ? ' : échec' : ' : en cours'}</span>
-          </li>
-        ))}
-      </ul>
-      <button type="button" className="btn secondary" onClick={onCancel}>
-        Annuler
-      </button>
+      <h1>{failure ? 'La génération s’est arrêtée' : `Nous préparons 10 propositions pour ${name || 'votre site'}`}</h1>
+      <p className="muted">
+        {failure
+          ? 'Les étapes déjà terminées sont conservées : la reprise repart de l’étape interrompue.'
+          : source === 'ai'
+            ? 'Trois étapes, l’une après l’autre. Comptez en général 1 à 3 minutes.'
+            : 'Quelques secondes suffisent.'}
+      </p>
+      <ol className="gen-list" aria-live="polite">
+        {PARTS.map((id) => {
+          const st = progress[id] || 'pending';
+          return (
+            <li key={id} className={`gen-item ${st}`}>
+              <span className="gen-dot" aria-hidden="true" />
+              {PART_LABELS[id]}
+              {st === 'retrying' && <span className="gen-note">Nouvelle tentative…</span>}
+              {st === 'pending' && <span className="gen-wait">En attente</span>}
+              <span className="sr-only"> : {STATE_TEXT[st]}</span>
+            </li>
+          );
+        })}
+      </ol>
+      {failure ? (
+        <div className="gen-failure">
+          <div className="alert" role="alert">
+            <strong>{failure.part ? `L’étape « ${PART_LABELS[failure.part]} » n’a pas abouti.` : 'Une étape n’a pas abouti.'}</strong> {failure.message}
+          </div>
+          <div className="gen-actions">
+            {failure.canResume && (
+              <button type="button" className="btn primary" onClick={onResume}>
+                Reprendre la génération
+              </button>
+            )}
+            <button type="button" className="btn secondary" onClick={onEdit}>
+              Modifier le brief
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button type="button" className="btn secondary" onClick={onCancel}>
+          Annuler
+        </button>
+      )}
     </div>
   );
 }
@@ -423,6 +448,8 @@ export default function App({ mode = 'client', runner = null, imagesFn = null, i
   const [error, setError] = useState(null);
   const [errorStep, setErrorStep] = useState(0);
   const [source, setSource] = useState(runner ? 'ai' : 'demo');
+  const [failure, setFailure] = useState(null);
+  const partialRef = useRef({});
   const abortRef = useRef(null);
   const loaded = useRef(false);
 
@@ -440,11 +467,15 @@ export default function App({ mode = 'client', runner = null, imagesFn = null, i
     window.scrollTo?.(0, 0);
   }, [screen]);
 
-  async function run(useRunner = runner) {
+  // resume = true : reprend à l'étape interrompue en gardant les étapes terminées
+  async function run({ resume = false } = {}) {
+    const useRunner = runner;
     abortRef.current?.abort();
     const ctl = new AbortController();
     abortRef.current = ctl;
     setError(null);
+    setFailure(null);
+    if (!resume) partialRef.current = {};
     imgAbortRef.current?.abort();
     setAiImgs([]);
     setStockImgs([]);
@@ -456,8 +487,10 @@ export default function App({ mode = 'client', runner = null, imagesFn = null, i
       const started = Date.now();
       const r = await generateSite(brief, useRunner, {
         signal: ctl.signal,
+        done: partialRef.current,
         onPart: (part, state) => setProgress((p) => ({ ...p, [part]: state })),
       });
+      partialRef.current = {};
       if (!useRunner) await new Promise((res) => setTimeout(res, Math.max(0, 900 - (Date.now() - started))));
       if (ctl.signal.aborted) return;
       setResult(r);
@@ -466,21 +499,13 @@ export default function App({ mode = 'client', runner = null, imagesFn = null, i
       startImages(r.content);
     } catch (e) {
       if (ctl.signal.aborted || e?.code === 'cancelled') return;
-      setErrorStep(STEPS.length - 1);
-      setError(
-        <>
-          <strong>La génération n’a pas abouti.</strong> {e?.message || ''}
-          <span className="alert-actions">
-            <button type="button" className="btn secondary small" onClick={() => run(useRunner)}>
-              Réessayer
-            </button>
-            <button type="button" className="btn-text small" onClick={() => run(null)}>
-              Voir les modèles avec des textes génériques
-            </button>
-          </span>
-        </>
-      );
-      setScreen('form');
+      if (e?.partial) partialRef.current = e.partial;
+      const fixable = ['auth', 'credit', 'workspace', 'model', 'no_key'].includes(e?.code);
+      setFailure({
+        part: e?.part,
+        message: (e?.message || 'L’IA n’a pas répondu.') + (fixable ? ' Corrigez ce réglage dans Vercel, puis reprenez.' : ''),
+        canResume: e?.code !== 'bad_request',
+      });
     }
   }
 
@@ -542,7 +567,21 @@ export default function App({ mode = 'client', runner = null, imagesFn = null, i
           ) : (
             <ClientStepper brief={brief} setBrief={setBrief} onSubmit={() => run()} error={error} initialStep={errorStep} extra={formExtra} />
           ))}
-        {screen === 'generating' && <Generating progress={progress} onCancel={cancel} name={brief.businessName} source={source} />}
+        {screen === 'generating' && (
+          <Generating
+            progress={progress}
+            onCancel={cancel}
+            name={brief.businessName}
+            source={source}
+            failure={failure}
+            onResume={() => run({ resume: true })}
+            onEdit={() => {
+              setFailure(null);
+              setErrorStep(0);
+              setScreen('form');
+            }}
+          />
+        )}
         {screen === 'gallery' && result && (
           <Gallery
             result={result}

@@ -410,9 +410,10 @@ export function normalizeConcepts(raw, brief) {
   const out = [];
   for (const item of list) {
     const id = String(item?.archetype || '').trim().toLowerCase();
-    if (!ARCHETYPE_MAP[id] || seen.has(id)) continue;
+    const concept = { archetype: id, headline: str(item.headline, 90), subheadline: str(item.subheadline, 200), cta: str(item.cta, 28), why: str(item.why, 180) };
+    if (!ARCHETYPE_MAP[id] || seen.has(id) || !concept.headline || !concept.subheadline) continue;
     seen.add(id);
-    out.push({ archetype: id, headline: str(item.headline, 90), subheadline: str(item.subheadline, 200), cta: str(item.cta, 28), why: str(item.why, 180) });
+    out.push(concept);
   }
   // Compléter jusqu'à 10 directions différentes si l'IA en a donné moins
   const fallback = demoConcepts(brief);

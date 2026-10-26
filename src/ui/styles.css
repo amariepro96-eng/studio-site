@@ -171,6 +171,13 @@ html, body { margin: 0; background: #f3f4f6; }
 .gen-item.failed .gen-dot { animation: none; border: 0; background: var(--danger); }
 .gen-item.done { color: var(--muted); }
 .gen-note { margin-left: auto; font-size: 0.86rem; color: var(--warn); font-weight: 600; }
+.gen-wait { margin-left: auto; font-size: 0.86rem; color: var(--muted); }
+.gen-item.pending { color: var(--muted); }
+.gen-item.pending .gen-dot { animation: none; border-color: var(--line-strong); }
+.gen-visual.stopped span { animation: none; opacity: 0.25; }
+.gen-failure { display: grid; gap: 16px; text-align: left; }
+.gen-failure .alert { margin: 0; }
+.gen-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* Galerie */

@@ -8,7 +8,7 @@ Agent IA qui crée un site internet à partir d'un questionnaire et propose **10
 ## Comment ça marche
 
 1. Le questionnaire produit un **brief** (activité, offre, style, coordonnées).
-2. Trois demandes partent en parallèle vers l'API Claude :
+2. Trois demandes partent **l'une après l'autre** vers l'API Claude, avec un format JSON imposé (sorties structurées). Chaque réponse est contrôlée et redemandée si elle est incomplète ; en cas d'échec persistant, la génération s'arrête et reprend à l'étape interrompue. Aucun texte générique ne remplace une réponse de l'IA :
    - choix et classement de 10 directions artistiques parmi 12, avec une accroche différente pour chacune ;
    - textes principaux (atouts, services, histoire, appel à l'action, référencement) ;
    - pages secondaires (FAQ, contact, produits pour une boutique).
@@ -31,12 +31,13 @@ Sans clé API, l'application fonctionne en **mode démo** avec des textes géné
 | `ANTHROPIC_API_KEY` | Clé API créée sur platform.claude.com | Oui, pour l'IA |
 | `AGENCY_PASSWORD` | Mot de passe de `/agence` | Fortement conseillé |
 | `ANTHROPIC_WORKSPACE_ID` | Seulement si la clé Claude n'est rattachée à aucun workspace | Non |
+| `AI_EFFORT` | Effort de Claude : `low`, `medium` (défaut) ou `high` | Non |
 | `CLAUDE_MODEL` | Modèle utilisé (défaut : `claude-sonnet-5-5`) | Non |
 | `GEMINI_API_KEY` | Clé Google AI Studio pour créer les images par IA | Non (conseillé) |
 | `GEMINI_IMAGE_MODEL` | Modèle d'image (défaut : `gemini-nano-banana-2.1`) | Non |
 | `IMAGES_PER_HOUR` | Images IA autorisées par visiteur et par heure (défaut : 80) | Non |
 | `UNSPLASH_ACCESS_KEY` | Photos libres de droits, utilisées si Gemini n'est pas configuré | Non |
-| `GENERATIONS_PER_HOUR` | Générations autorisées par visiteur et par heure (défaut : 10) | Non |
+| `GENERATIONS_PER_HOUR` | Générations autorisées par visiteur et par heure (défaut : 20) | Non |
 | `NEXT_PUBLIC_APP_NAME` | Nom affiché de l'outil | Non |
 
 Chaque génération complète fait 3 appels à l'API Claude, plus 0 à 8 images Gemini selon le nombre de photos fournies. Les coûts dépendent des modèles choisis : consultez les grilles tarifaires (platform.claude.com, ai.google.dev/pricing) et fixez une limite de dépenses dans chaque console.
