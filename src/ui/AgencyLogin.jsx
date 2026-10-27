@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import { BrandMark } from './Chrome.jsx';
 
 export default function AgencyLogin() {
   const [password, setPassword] = useState('');
@@ -23,9 +24,13 @@ export default function AgencyLogin() {
   return (
     <div className="ss">
       <main className="login">
+        <span className="brand">
+          <BrandMark />
+          {process.env.NEXT_PUBLIC_APP_NAME || 'Studio Site'}
+        </span>
         <form className="card" onSubmit={submit}>
-          <h1>Mode agence</h1>
-          <p className="muted">Cet espace est réservé. Saisissez le mot de passe défini dans les réglages du serveur.</p>
+          <h1>Espace agence</h1>
+          <p className="muted">Vos dossiers clients sont ici. Saisissez votre mot de passe agence.</p>
           <div className="q-field">
             <label className="q-label" htmlFor="pw">
               Mot de passe

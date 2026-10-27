@@ -1,9 +1,9 @@
 'use client';
 import { useEffect, useState } from 'react';
 import App from './App.jsx';
+import { AgencyBar } from './Chrome.jsx';
 import { apiRunner, apiImages } from '../ai/generate.js';
 import { apiImageGen } from '../ai/images.js';
-import { apiDrive } from '../ai/drive.js';
 
 function saveBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
@@ -19,7 +19,7 @@ function saveBlob(blob, filename) {
 
 const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME || 'Studio Site';
 
-export default function NextShell({ mode }) {
+export default function NextShell({ mode, studioName }) {
   const [status, setStatus] = useState(null);
   useEffect(() => {
     fetch('/api/status')
@@ -30,6 +30,7 @@ export default function NextShell({ mode }) {
   if (!status) {
     return (
       <div className="ss">
+        {mode === 'agence' && <AgencyBar studioName={studioName || APP_NAME} current="atelier" />}
         <div className="boot" aria-busy="true" />
       </div>
     );
@@ -39,5 +40,6 @@ export default function NextShell({ mode }) {
       <strong>Mode démo.</strong> Aucune clé API n’est configurée : les modèles utiliseront des textes génériques. Ajoutez <code>ANTHROPIC_API_KEY</code> dans les réglages Vercel pour des textes rédigés par l’IA.
     </>
   ) : null;
-  return <App mode={mode} appName={APP_NAME} runner={status.ai ? apiRunner() : null} imagesFn={status.images ? apiImages() : null} imageGen={status.aiImages ? apiImageGen() : null} drive={status.drive ? apiDrive() : null} saveFile={saveBlob} banner={banner} />;
+  const header = mode === 'agence' ? <AgencyBar studioName={studioName || APP_NAME} current="atelier" /> : undefined;
+  return <App mode={mode} appName={APP_NAME} header={header} runner={status.ai ? apiRunner() : null} imagesFn={status.images ? apiImages() : null} imageGen={status.aiImages ? apiImageGen() : null} saveFile={saveBlob} banner={banner} />;
 }

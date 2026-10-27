@@ -2,8 +2,16 @@
 
 Agent IA qui crée un site internet à partir d'un questionnaire et propose **10 modèles uniques**, rédigés pour l'activité du client.
 
-- **Mode client** (`/`) : le client répond seul à 5 étapes de questions, choisit parmi 10 propositions et télécharge son site.
-- **Mode agence** (`/agence`) : vous remplissez le brief sur une seule page, comparez les 10 modèles, variez la mise en page ou la palette, puis livrez le site (.zip). Protégé par mot de passe.
+Le parcours client se gère depuis l'**espace agence** (`/agence`, protégé par mot de passe) :
+
+1. **Nouveau client** : un dossier est créé avec un lien privé de questionnaire (`/questionnaire/…`) et un message prêt à copier.
+2. **Questionnaire** : le client répond chez lui en 7 étapes (activité, site, offre, style, logo et photos, coordonnées, infos légales et domaine). Ses réponses sont enregistrées à chaque étape. Il ne voit jamais la génération.
+3. **Génération privée** : l'agence lance les 10 modèles depuis le dossier.
+4. **Sélection** : l'agence retient 2 à 5 modèles et écrit un message. Le client les découvre sur sa page privée (`/propositions/…`).
+5. **Choix** : le client choisit un modèle et laisse un commentaire.
+6. **Mise en service** : aperçu complet, téléchargement du .zip (mentions légales et logo déjà remplis), liste de contrôle, puis « Site en ligne ».
+
+L'**Atelier libre** (`/agence/atelier`) garde l'ancien fonctionnement : brief sur une page, 10 modèles, .zip, sans rien enregistrer. La page d'accueil (`/`) ne génère plus rien : elle oriente les visiteurs.
 
 ## Comment ça marche
 
@@ -13,33 +21,26 @@ Agent IA qui crée un site internet à partir d'un questionnaire et propose **10
    - textes principaux (atouts, services, histoire, appel à l'action, référencement) ;
    - pages secondaires (FAQ, contact, produits pour une boutique).
 3. Le **moteur de rendu** assemble chaque modèle selon la composition propre à son style (2 recettes par style : galeries, bandeaux photo, étapes, manifeste, bento…) à partir de blocs validés : polices, palettes, mises en page et visuels propres à chaque direction. Le rendu reste professionnel quel que soit le texte.
-4. **Images** : les photos envoyées par le client (redimensionnées dans son navigateur ; transmises au Drive seulement si l'enregistrement automatique est configuré) passent en premier. Gemini complète jusqu'à 10 visuels en créant jusqu'à 8 images d'ambiance réalistes à partir de descriptions rédigées par Claude. Sans clé Gemini, des photos Unsplash (si configuré) ou des illustrations graphiques prennent le relais.
+4. **Images** : les photos envoyées par le client (redimensionnées dans son navigateur, puis rangées dans le stockage privé de son dossier) passent en premier. Gemini complète jusqu'à 10 visuels en créant jusqu'à 8 images d'ambiance réalistes à partir de descriptions rédigées par Claude. Sans clé Gemini, des photos Unsplash (si configuré) ou des illustrations graphiques prennent le relais.
 5. Le client choisit un modèle : le site complet (accueil, services, boutique, à propos, FAQ, contact, mentions légales) se prévisualise sur ordinateur, tablette et mobile, puis se télécharge en .zip prêt à héberger.
 
 Sans clé API, l'application fonctionne en **mode démo** avec des textes génériques.
-
-## Enregistrement automatique dans Google Drive
-
-Avec `DRIVE_WEBHOOK_URL` et `DRIVE_WEBHOOK_SECRET`, chaque questionnaire terminé est enregistré par le script du tableau « Suivi clients » :
-
-- dès le clic sur « Créer mes 10 propositions » (ou « Générer les 10 modèles ») : une ligne dans le tableau, le dossier du client et une fiche brief (Google Docs) dans `1-Brief et infos` ;
-- les photos du client dans `2-Photos et logo` ;
-- à chaque téléchargement du site, une copie du .zip dans `3-Versions du site` (`identifiant-vN-date.zip`).
-
-Les envois passent par la route serveur `/api/drive` : l'adresse et la clé du script ne sont jamais envoyées au navigateur. Les fichiers partent en morceaux de 2,25 Mo pour rester sous la limite de 4,5 Mo par requête de Vercel. En mode client, une phrase informe le visiteur que ses réponses et ses photos sont transmises ; sans ces variables, rien ne quitte le navigateur à part le brief envoyé à l'IA.
 
 ## Mettre en ligne (Vercel)
 
 1. Créez un dépôt GitHub et envoyez-y ce dossier.
 2. Sur [vercel.com](https://vercel.com), **Add New → Project**, importez le dépôt, gardez les réglages proposés (Next.js).
-3. Dans **Settings → Environment Variables**, ajoutez au minimum `ANTHROPIC_API_KEY` et `AGENCY_PASSWORD`, puis redéployez.
+3. Dans **Settings → Environment Variables**, ajoutez au minimum `ANTHROPIC_API_KEY` et `AGENCY_PASSWORD`.
+4. **Stockage des dossiers** : onglet **Storage** › **Create** › **Blob** › accès **Private** › reliez-le au projet. Vercel ajoute seul `BLOB_STORE_ID` (et `BLOB_READ_WRITE_TOKEN`). Redéployez.
+
+Sans stockage, l'espace agence affiche la marche à suivre ; seul l'Atelier libre fonctionne. En local (`npm run dev`) sans Vercel Blob, les dossiers sont rangés dans `.data/`.
 
 ## Variables d'environnement
 
 | Variable | Rôle | Obligatoire |
 |---|---|---|
 | `ANTHROPIC_API_KEY` | Clé API créée sur platform.claude.com | Oui, pour l'IA |
-| `AGENCY_PASSWORD` | Mot de passe de `/agence` | Fortement conseillé |
+| `AGENCY_PASSWORD` | Mot de passe de l’espace agence (sans lui, l’espace reste fermé en ligne) | Oui |
 | `ANTHROPIC_WORKSPACE_ID` | Seulement si la clé Claude n'est rattachée à aucun workspace | Non |
 | `AI_EFFORT` | Effort de Claude : `low`, `medium` (défaut) ou `high` | Non |
 | `CLAUDE_MODEL` | Modèle utilisé (défaut : `claude-sonnet-5-5`) | Non |
@@ -48,9 +49,8 @@ Les envois passent par la route serveur `/api/drive` : l'adresse et la clé du s
 | `IMAGES_PER_HOUR` | Images IA autorisées par visiteur et par heure (défaut : 80) | Non |
 | `UNSPLASH_ACCESS_KEY` | Photos libres de droits, utilisées si Gemini n'est pas configuré | Non |
 | `GENERATIONS_PER_HOUR` | Générations autorisées par visiteur et par heure (défaut : 20) | Non |
-| `NEXT_PUBLIC_APP_NAME` | Nom affiché de l'outil | Non |
-| `DRIVE_WEBHOOK_URL` | Adresse `/exec` du script « Automatisation dossiers clients » déployé en application Web | Non |
-| `DRIVE_WEBHOOK_SECRET` | Clé secrète affichée par le menu **Clients › Connecter Studio Site** du tableau | Non |
+| `NEXT_PUBLIC_APP_NAME` | Nom affiché de l'outil (modifiable aussi dans Réglages) | Non |
+| `BLOB_STORE_ID`, `BLOB_READ_WRITE_TOKEN` | Ajoutées par Vercel quand le stockage Blob est relié au projet | Oui, pour les dossiers clients |
 
 Chaque génération complète fait 3 appels à l'API Claude, plus 0 à 8 images Gemini selon le nombre de photos fournies. Les coûts dépendent des modèles choisis : consultez les grilles tarifaires (platform.claude.com, ai.google.dev/pricing) et fixez une limite de dépenses dans chaque console.
 
@@ -69,12 +69,19 @@ npm run build:demo           # construit dist/studio-site-demo.html (démo auton
 
 ```
 app/                      Pages Next.js et routes API
-  page.js                 Mode client
-  agence/page.js          Mode agence (mot de passe)
+  page.js                 Accueil (oriente vers les liens privés et l'espace agence)
+  agence/page.js          Tableau de bord des clients (mot de passe)
+  agence/clients/[id]     Dossier d'un client, de l'envoi du questionnaire à la mise en ligne
+  agence/atelier          Atelier libre (génération sans dossier)
+  agence/reglages         Nom affiché, prénom, contact, hébergeur des mentions légales
+  questionnaire/[id]      Questionnaire du client (lien privé)
+  propositions/[id]       Sélection de modèles et choix du client (lien privé)
+  api/agence/…            Dossiers, images et réglages (réservé à l'agence)
+  api/q/[id], api/p/[id]  Questionnaire et propositions (lien privé du client)
+  api/files/[id]/[img]    Photos, logo et images IA d'un dossier
   api/generate            Appel à l'API Claude (la clé reste côté serveur)
   api/images              Recherche de photos Unsplash (facultatif)
   api/images/generate     Création d'une image avec Gemini (la clé reste côté serveur)
-  api/drive               Enregistrement dans Google Drive (brief, photos, .zip)
   api/status, api/agence-login
 src/engine/               Le cœur, sans dépendance au framework
   questions.js            Questionnaire, secteurs, exemples
@@ -86,11 +93,14 @@ src/engine/               Le cœur, sans dépendance au framework
   content.js              Textes de démo, nettoyage des réponses de l'IA, classement
   prompts.js              Consignes envoyées à l'IA
   zip.js                  Export .zip
-  fiche.js                Fiche brief lisible pour le Drive
 src/ai/generate.js        Orchestration des 3 appels
 src/ai/images.js          Photos du client (redimensionnement) et images Gemini
-src/ai/drive.js           Envoi vers le Drive (brief, photos, .zip en morceaux)
+  records.js              Étapes d'un dossier, images et brief prêts pour le rendu
+src/server/store.js       Stockage (Vercel Blob privé, lecture cohérente, écriture conditionnelle ; .data/ en local)
+src/server/http.js        Accès agence, erreurs, nettoyage des réponses
 src/ui/                   Interface (questionnaire, galerie, aperçu)
+src/ui/agency/            Tableau de bord, dossier client, réglages
+src/ui/client/            Pages ouvertes par le client
 src/artifact/entry.jsx    Version démo publiée sur claude.ai
 ```
 
@@ -102,8 +112,8 @@ Ajoutez un objet dans `src/engine/archetypes.js` (polices Google Fonts, 2 palett
 
 - Les formulaires ouvrent la messagerie du visiteur ; pas encore d'envoi direct (service de formulaires à brancher).
 - Boutique : panier et commande par e-mail ; pas de paiement en ligne (Stripe à brancher en V2).
-- Pas encore de comptes clients ni d'hébergement automatique des sites générés.
+- Pas d'hébergement automatique des sites générés : le .zip passe par GitHub et Vercel.
 - La limite de générations est en mémoire : suffisante pour un test, à remplacer par une base (ex. Vercel KV) en production.
-- Les mentions légales sont un modèle à compléter.
-- Les photos du client ne sont pas conservées si la page est fermée avant le téléchargement.
+- Les mentions légales sont remplies avec les infos du questionnaire ; ce qui manque reste entre crochets.
+- L'application n'envoie ni e-mail ni SMS : elle prépare les messages, que l'agence envoie elle-même.
 - Les images IA sont des illustrations d'ambiance : elles ne doivent pas présenter de faux produits, lieux ou personnes comme réels.

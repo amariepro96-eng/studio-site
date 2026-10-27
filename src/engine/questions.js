@@ -70,8 +70,32 @@ export function emptyBrief() {
     facebook: '',
     reviews: '',
     aiImages: true,
+    // Questionnaire envoyé au client : photos téléversées, logo, infos légales et domaine
+    photos: [],
+    logo: null,
+    logoInHeader: true,
+    legalName: '',
+    legalForm: '',
+    capital: '',
+    siret: '',
+    rcs: '',
+    publisher: '',
+    siege: '',
+    domainOwned: '',
+    domain: '',
   };
 }
+
+export const LEGAL_FORMS = [
+  { id: 'EI ou micro-entreprise', label: 'EI ou micro-entreprise' },
+  { id: 'EURL', label: 'EURL' },
+  { id: 'SARL', label: 'SARL' },
+  { id: 'SAS ou SASU', label: 'SAS ou SASU' },
+  { id: 'Association', label: 'Association' },
+  { id: 'Autre', label: 'Autre' },
+];
+
+export const hasCapital = (b) => ['EURL', 'SARL', 'SAS ou SASU'].includes(b.legalForm);
 
 // Étapes du questionnaire. Chaque champ : id, type, label, aide, options, condition d'affichage.
 export const STEPS = [
@@ -147,6 +171,71 @@ export const STEPS = [
   },
 ];
 
+// Étape ajoutée au questionnaire envoyé au client
+export const LEGAL_STEP = {
+  id: 'legal',
+  title: 'Infos légales et domaine',
+  intro: 'Ces informations sont obligatoires sur un site professionnel. Si vous ne les avez pas sous la main, laissez vide : nous vous les redemanderons.',
+  fields: [
+    { id: 'legalName', type: 'text', label: 'Raison sociale', placeholder: 'Ex. SARL Atelier Lumière', half: true },
+    { id: 'legalForm', type: 'select', label: 'Forme juridique', options: LEGAL_FORMS, half: true },
+    { id: 'capital', type: 'text', label: 'Capital social', placeholder: 'Ex. 5 000 €', half: true, showIf: hasCapital },
+    { id: 'siret', type: 'text', label: 'Numéro SIRET', placeholder: '14 chiffres', half: true, inputMode: 'numeric' },
+    { id: 'rcs', type: 'text', label: 'Ville du RCS (ou RM pour un artisan)', placeholder: 'Ex. Pontoise', half: true },
+    { id: 'publisher', type: 'text', label: 'Directeur de la publication', hint: 'En général le dirigeant.', placeholder: 'Prénom et nom', half: true },
+    { id: 'siege', type: 'text', label: 'Adresse du siège', placeholder: 'Si elle est différente de l’adresse affichée sur le site' },
+    {
+      id: 'domainOwned',
+      type: 'radio',
+      label: 'Votre nom de domaine',
+      options: [
+        { id: 'non', label: 'Je n’en ai pas encore', hint: 'Nous vous accompagnons pour l’acheter à votre nom' },
+        { id: 'oui', label: 'J’en ai déjà un', hint: 'Nous le relierons à votre nouveau site' },
+      ],
+    },
+    { id: 'domain', type: 'text', label: 'Adresse souhaitée ou actuelle', placeholder: 'Ex. atelier-lumiere.fr' },
+  ],
+};
+
+const LOGO_FIELD = { id: 'logo', type: 'logo', label: 'Votre logo', hint: 'Facultatif. Idéalement sur fond transparent ou blanc (PNG ou JPEG).' };
+
+// Questionnaire complet envoyé au client : 7 étapes, photos transmises à l'agence.
+// strict : le client doit laisser au moins un téléphone ou un e-mail (pas l'agence, qui complète plus tard)
+export function remoteSteps({ strict = true } = {}) {
+  return [
+    ...STEPS.map((s) => {
+      if (s.id === 'photos') {
+        return {
+          ...s,
+          intro: 'Votre logo et vos propres photos rendent le site plus vivant et plus crédible. Ils sont facultatifs.',
+          fields: [
+            LOGO_FIELD,
+            ...s.fields.map((f) => {
+              if (f.id === 'photos') return { ...f, hint: 'Jusqu’à 10 photos : votre lieu, votre équipe au travail, vos réalisations, vos produits. Elles sont transmises uniquement à l’agence qui crée votre site.' };
+              if (f.id === 'aiImages') return { ...f, label: 'Compléter avec des images d’ambiance', hint: 'Si vous avez moins de 10 photos, nous ajoutons des images réalistes créées par l’IA (lieu, matières, gestes). Elles ne représentent jamais vos vrais produits ni votre équipe.' };
+              return f;
+            }),
+          ],
+        };
+      }
+      if (s.id === 'contact' && strict) return { ...s, validate: contactRequired };
+      return s;
+    }),
+    LEGAL_STEP,
+  ];
+}
+
+function contactRequired(brief) {
+  if (!String(brief.phone || '').trim() && !String(brief.email || '').trim()) return { phone: 'Indiquez au moins un téléphone ou un e-mail.' };
+  return {};
+}
+
+// Infos légales encore manquantes (pour l'agence)
+export function missingLegal(brief) {
+  const b = brief || {};
+  return LEGAL_STEP.fields.filter((f) => !['siege', 'domain', 'domainOwned'].includes(f.id) && (!f.showIf || f.showIf(b)) && !String(b[f.id] || '').trim()).map((f) => f.label);
+}
+
 export function sectorLabel(brief) {
   if (brief.sector === 'autre') return brief.sectorOther || 'Activité';
   return SECTORS.find((s) => s.id === brief.sector)?.label || brief.sectorOther || '';
@@ -160,12 +249,14 @@ export function validateStep(step, brief) {
     if (f.required && (!v || (typeof v === 'string' && !v.trim()))) errors[f.id] = 'Ce champ est nécessaire.';
     if (f.id === 'description' && v && v.trim().length < 15) errors[f.id] = 'Ajoutez une ou deux phrases de plus.';
     if (f.type === 'email' && v && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim())) errors[f.id] = 'Cette adresse e-mail semble incomplète.';
+    if (f.id === 'siret' && v && v.replace(/\s/g, '').length !== 14) errors[f.id] = 'Le numéro SIRET compte 14 chiffres.';
   }
+  if (step.validate) Object.assign(errors, step.validate(brief));
   return errors;
 }
 
-export function validateBrief(brief) {
-  return STEPS.reduce((acc, s) => ({ ...acc, ...validateStep(s, brief) }), {});
+export function validateBrief(brief, steps = STEPS) {
+  return steps.reduce((acc, s) => ({ ...acc, ...validateStep(s, brief) }), {});
 }
 
 export const EXAMPLES = [

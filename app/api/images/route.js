@@ -1,9 +1,11 @@
 import { config } from '../../../src/server/config.js';
+import { isAgency } from '../../../src/server/http.js';
 
 export const dynamic = 'force-dynamic';
 
 // Recherche de photos libres de droits sur Unsplash (facultatif : nécessite UNSPLASH_ACCESS_KEY)
 export async function GET(req) {
+  if (!isAgency(req)) return Response.json({ images: [] }, { status: 401 });
   const { unsplashKey } = config();
   if (!unsplashKey) return Response.json({ images: [] });
   const q = new URL(req.url).searchParams.get('q')?.slice(0, 120) || '';

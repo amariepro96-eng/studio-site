@@ -22,13 +22,13 @@ METTRE LE SITE EN LIGNE GRATUITEMENT (5 minutes)
 5. Créez un compte Netlify gratuit pour garder le site et le relier à votre nom de domaine.
 
 AVANT LA MISE EN LIGNE
-- Complétez la page « Mentions légales » (les passages entre crochets).
+- Vérifiez la page « Mentions légales » : complétez les passages restés entre crochets.
 - Vérifiez les textes, les prix et les horaires.
 - Formulaires : ils ouvrent la messagerie du visiteur avec le message prêt à envoyer à ${brief.email || 'votre adresse e-mail'}.
 ${brief.siteType === 'boutique' ? '- Boutique : les commandes arrivent par e-mail ; le paiement en ligne n’est pas encore branché.\n' : ''}`;
 }
 
-export async function buildZip({ brief, content, model, images }) {
+export async function buildZip({ brief, content, model, images, extraFiles = [] }) {
   const zip = new JSZip();
   const folder = zip.folder(slugify(brief.businessName || 'mon-site'));
   for (const slug of allPageSlugs(brief, content)) {
@@ -37,6 +37,7 @@ export async function buildZip({ brief, content, model, images }) {
   for (const img of images || []) {
     if (img?.blob && img.file) folder.file(img.file, img.blob);
   }
+  for (const f of extraFiles) if (f?.blob && f.file) folder.file(f.file, f.blob);
   folder.file('LISEZ-MOI.txt', readme(brief, model));
   return zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
 }

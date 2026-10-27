@@ -43,6 +43,7 @@ ul{padding-left:1.1em}
 .site-header{position:relative;z-index:30;background:var(--header-bg)}
 .nav{display:flex;align-items:center;justify-content:space-between;gap:28px;min-height:78px}
 .logo{font-family:var(--font-display);font-weight:var(--display-weight);font-size:1.32rem;text-decoration:none;letter-spacing:var(--display-tracking);text-transform:var(--display-case);white-space:nowrap;line-height:1}
+.logo-img{display:inline-flex;align-items:center}.logo-img img{display:block;height:46px;width:auto;max-width:190px;object-fit:contain}
 .nav-links{display:flex;gap:clamp(16px,2.4vw,32px);align-items:center;list-style:none;margin:0;padding:0}
 .nav-links a{text-decoration:none;font-size:.95rem;font-weight:500;opacity:.82}
 .nav-links a:hover{opacity:1}

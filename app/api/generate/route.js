@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { isAgency } from '../../../src/server/http.js';
 import { buildPrompt, PARTS } from '../../../src/engine/prompts.js';
 import { schemaFor } from '../../../src/engine/schemas.js';
 import { validatePart } from '../../../src/engine/validate.js';
@@ -55,6 +56,7 @@ async function ask(client, cfg, prompt, schema, extra = '') {
 }
 
 export async function POST(req) {
+  if (!isAgency(req)) return fail(401, 'Session agence expirée : reconnectez-vous.', 'unauthorized');
   const cfg = config();
   if (!cfg.apiKey) return fail(503, 'La clé API n’est pas configurée sur le serveur (variable ANTHROPIC_API_KEY).', 'no_key');
 

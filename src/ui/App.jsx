@@ -26,10 +26,10 @@ const store = {
   },
 };
 
-const archName = (m) => ARCHETYPE_MAP[m.archetype]?.name || m.archetype;
+export const archName = (m) => ARCHETYPE_MAP[m.archetype]?.name || m.archetype;
 
 // Nouvelle mise en page pour le même modèle (on garde la palette)
-function varyModel(m) {
+export function varyModel(m) {
   const current = JSON.stringify(resolveModel(m).variants);
   const paletteIndex = m.paletteIndex ?? resolveModel(m).paletteIndex;
   for (let s = (m.seed || 0) + 1; s < (m.seed || 0) + 25; s++) {
@@ -39,7 +39,7 @@ function varyModel(m) {
   return { ...m, seed: (m.seed || 0) + 1, variants: undefined, paletteIndex };
 }
 
-function nextPalette(m) {
+export function nextPalette(m) {
   const n = ARCHETYPE_MAP[m.archetype]?.palettes.length || 1;
   return { ...m, paletteIndex: ((m.paletteIndex ?? resolveModel(m).paletteIndex) + 1) % n };
 }
@@ -67,7 +67,7 @@ function Header({ mode, appName, modeSwitch, onHome }) {
 // ---------- Génération en cours (3 étapes successives) ----------
 const STATE_TEXT = { done: 'terminé', failed: 'échec', running: 'en cours', retrying: 'nouvelle tentative', pending: 'en attente' };
 
-function Generating({ progress, onCancel, name, source, failure, onResume, onEdit }) {
+export function Generating({ progress, onCancel, name, source, failure, onResume, onEdit }) {
   return (
     <div className="generating">
       <div className={`gen-visual${failure ? ' stopped' : ''}`} aria-hidden="true">
@@ -161,7 +161,7 @@ function ModelCard({ model, index, brief, content, images, agency, onOpen, onCho
   );
 }
 
-function PreviewModal({ models, index, setIndex, brief, content, images, onChoose, onClose }) {
+export function PreviewModal({ models, index, setIndex, brief, content, images, onChoose, onClose, renderAction, label }) {
   const model = models[index];
   const [page, setPage] = useState('index');
   const [device, setDevice] = useState('desktop');
@@ -187,7 +187,7 @@ function PreviewModal({ models, index, setIndex, brief, content, images, onChoos
           </button>
           <div className="toolbar-title">
             <span className="model-rank">{index + 1}</span>
-            <strong>{archName(model)}</strong>
+            <strong>{label ? label(model, index) : archName(model)}</strong>
           </div>
           <button type="button" className="icon-btn" onClick={() => setIndex((index + 1) % models.length)} aria-label="Modèle suivant">
             ›
@@ -196,9 +196,13 @@ function PreviewModal({ models, index, setIndex, brief, content, images, onChoos
         <PageTabs pages={pages} value={page} onChange={setPage} />
         <div className="toolbar-right">
           <DeviceToggle value={device} onChange={setDevice} />
-          <button type="button" className="btn primary small" onClick={() => onChoose(model)}>
-            Choisir ce modèle
-          </button>
+          {renderAction ? (
+            renderAction(model)
+          ) : (
+            <button type="button" className="btn primary small" onClick={() => onChoose(model)}>
+              Choisir ce modèle
+            </button>
+          )}
           <button type="button" className="icon-btn" ref={closeRef} onClick={onClose} aria-label="Fermer l’aperçu">
             ✕
           </button>
@@ -211,7 +215,7 @@ function PreviewModal({ models, index, setIndex, brief, content, images, onChoos
   );
 }
 
-function ImageStatus({ status, agency, onRetry }) {
+export function ImageStatus({ status, agency, onRetry }) {
   if (!status || status.state === 'idle') return null;
   if (status.state === 'running') {
     return (
@@ -246,42 +250,7 @@ function ImageStatus({ status, agency, onRetry }) {
   );
 }
 
-// Enregistrement dans Google Drive : visible seulement en mode agence
-function DriveStatus({ status, onRetry }) {
-  if (!status || status.state === 'idle') return null;
-  if (status.state === 'running') {
-    return (
-      <div className="img-status drive-status" role="status">
-        <span className="gen-dot" aria-hidden="true" />
-        Drive : enregistrement en cours…
-      </div>
-    );
-  }
-  if (status.state === 'failed') {
-    return (
-      <div className="alert soft drive-status" role="status">
-        Drive : l’enregistrement a échoué. {status.message || ''}{' '}
-        {onRetry && (
-          <button type="button" className="btn-text small" onClick={onRetry}>
-            Réessayer
-          </button>
-        )}
-      </div>
-    );
-  }
-  return (
-    <div className="img-status done drive-status" role="status">
-      Drive : {status.zip ? 'brief, photos et site enregistrés' : 'brief et photos enregistrés'}.{' '}
-      {status.dossier && (
-        <a href={status.dossier} target="_blank" rel="noopener noreferrer">
-          Ouvrir le dossier
-        </a>
-      )}
-    </div>
-  );
-}
-
-function Gallery({ result, brief, images, agency, onChoose, onUpdateModel, onEdit, onRegenerate, warnings, imgStatus, onRetryImages, driveStatus, onRetryDrive }) {
+function Gallery({ result, brief, images, agency, onChoose, onUpdateModel, onEdit, onRegenerate, warnings, imgStatus, onRetryImages }) {
   const [open, setOpen] = useState(null);
   const { models, content } = result;
   return (
@@ -308,7 +277,6 @@ function Gallery({ result, brief, images, agency, onChoose, onUpdateModel, onEdi
         </div>
       ))}
       <ImageStatus status={imgStatus} agency={agency} onRetry={onRetryImages} />
-      {agency && <DriveStatus status={driveStatus} onRetry={onRetryDrive} />}
       <div className="model-grid">
         {models.map((m, i) => (
           <ModelCard
@@ -346,7 +314,7 @@ function Gallery({ result, brief, images, agency, onChoose, onUpdateModel, onEdi
 }
 
 // ---------- Site final ----------
-function FinalView({ result, model, brief, images, agency, onBack, onEdit, onUpdateModel, saveFile, imgStatus, onRetryImages, onZip, driveStatus, onRetryDrive }) {
+function FinalView({ result, model, brief, images, agency, onBack, onEdit, onUpdateModel, saveFile, imgStatus, onRetryImages }) {
   const { content } = result;
   const [page, setPage] = useState('index');
   const [device, setDevice] = useState('desktop');
@@ -363,7 +331,6 @@ function FinalView({ result, model, brief, images, agency, onBack, onEdit, onUpd
       const blob = await buildZip({ brief, content, model, images });
       const r = await saveFile(blob, zipName(brief));
       if (r !== false) setNote('Le fichier .zip est prêt dans vos téléchargements.');
-      onZip?.(blob);
     } catch (e) {
       setNote(e?.message || 'Le téléchargement n’a pas abouti. Réessayez.');
     } finally {
@@ -409,7 +376,6 @@ function FinalView({ result, model, brief, images, agency, onBack, onEdit, onUpd
         </div>
         <aside className="final-side">
           <ImageStatus status={imgStatus} agency={agency} onRetry={onRetryImages} />
-          {agency && <DriveStatus status={driveStatus} onRetry={onRetryDrive} />}
           <button type="button" className="btn primary block" onClick={download} disabled={busy || imgStatus?.state === 'running'}>
             {busy ? 'Préparation du fichier…' : agency ? 'Télécharger le site (.zip)' : 'Télécharger mon site'}
           </button>
@@ -468,7 +434,7 @@ function FinalView({ result, model, brief, images, agency, onBack, onEdit, onUpd
 }
 
 // ---------- Application ----------
-export default function App({ mode = 'client', runner = null, imagesFn = null, imageGen = null, drive = null, saveFile, banner = null, modeSwitch = null, appName = 'Studio Site' }) {
+export default function App({ mode = 'client', runner = null, imagesFn = null, imageGen = null, saveFile, banner = null, modeSwitch = null, appName = 'Studio Site', header }) {
   const agency = mode === 'agence';
   const draftKey = `studio-site:brief:${mode}`;
   const [brief, setBrief] = useState(() => emptyBrief());
@@ -490,13 +456,6 @@ export default function App({ mode = 'client', runner = null, imagesFn = null, i
   const partialRef = useRef({});
   const abortRef = useRef(null);
   const loaded = useRef(false);
-  // Enregistrement dans Google Drive (brief, photos, .zip), les envois passent l'un après l'autre
-  const [driveStatus, setDriveStatus] = useState({ state: 'idle' });
-  const driveSession = useRef(null);
-  const driveBriefKey = useRef('');
-  const drivePhotos = useRef(new Set());
-  const driveZipKey = useRef('');
-  const driveTask = useRef(Promise.resolve());
 
   // Brouillon conservé dans le navigateur
   useEffect(() => {
@@ -520,10 +479,7 @@ export default function App({ mode = 'client', runner = null, imagesFn = null, i
     abortRef.current = ctl;
     setError(null);
     setFailure(null);
-    if (!resume) {
-      partialRef.current = {};
-      syncDrive();
-    }
+    if (!resume) partialRef.current = {};
     imgAbortRef.current?.abort();
     setAiImgs([]);
     setStockImgs([]);
@@ -592,63 +548,6 @@ export default function App({ mode = 'client', runner = null, imagesFn = null, i
     }
   }
 
-  // Brief et nouvelles photos vers le Drive (sans bloquer la génération)
-  function syncDrive() {
-    if (!drive) return driveTask.current;
-    const snapshot = { brief, photos: photos.filter((p) => p.source === 'client' && p.blob) };
-    driveTask.current = driveTask.current.catch(() => {}).then(() => pushDrive(snapshot));
-    return driveTask.current;
-  }
-
-  async function pushDrive({ brief: b, photos: list }) {
-    const key = JSON.stringify(b);
-    const pending = () => list.filter((p) => !drivePhotos.current.has(p.id));
-    if (key === driveBriefKey.current && driveSession.current && !pending().length) return;
-    setDriveStatus((s) => ({ ...s, state: 'running', message: '' }));
-    try {
-      if (key !== driveBriefKey.current || !driveSession.current) {
-        const r = await drive.brief(b, { mode, photos: list.length });
-        if (driveSession.current?.identifiant !== r.identifiant) {
-          drivePhotos.current = new Set();
-          driveZipKey.current = '';
-        }
-        driveSession.current = { identifiant: r.identifiant, jeton: r.jeton };
-        driveBriefKey.current = key;
-        setDriveStatus((s) => ({ ...s, dossier: r.dossier || s.dossier, zip: false }));
-      }
-      for (const p of pending()) {
-        const nom = String(p.file || '').split('/').pop() || `photo-${p.id}.jpg`;
-        await drive.fichier({ ...driveSession.current, dossier: 'photos', nom, blob: p.blob });
-        drivePhotos.current.add(p.id);
-      }
-      setDriveStatus((s) => ({ ...s, state: 'done', message: '' }));
-    } catch (e) {
-      console.warn('[drive]', e?.message);
-      setDriveStatus((s) => ({ ...s, state: 'failed', message: e?.message || '' }));
-    }
-  }
-
-  // .zip téléchargé : une copie dans « 3-Versions du site » (une seule par modèle et par brief)
-  function zipToDrive(blob, model) {
-    if (!drive) return;
-    syncDrive();
-    driveTask.current = driveTask.current
-      .catch(() => {})
-      .then(async () => {
-        const key = JSON.stringify([driveBriefKey.current, model.id, model.archetype, model.seed, model.paletteIndex, model.variants || null]);
-        if (!driveSession.current || key === driveZipKey.current) return;
-        setDriveStatus((s) => ({ ...s, state: 'running', message: '' }));
-        try {
-          await drive.fichier({ ...driveSession.current, dossier: 'versions', nom: 'auto', blob });
-          driveZipKey.current = key;
-          setDriveStatus((s) => ({ ...s, state: 'done', zip: true, message: '' }));
-        } catch (e) {
-          console.warn('[drive]', e?.message);
-          setDriveStatus((s) => ({ ...s, state: 'failed', message: e?.message || '' }));
-        }
-      });
-  }
-
   function cancel() {
     abortRef.current?.abort();
     setScreen(result ? 'gallery' : 'form');
@@ -659,11 +558,11 @@ export default function App({ mode = 'client', runner = null, imagesFn = null, i
   }
 
   const chosen = result?.models.find((m) => m.id === chosenId) || null;
-  const formExtra = { photos, setPhotos, aiAvailable: Boolean(imageGen), driveEnabled: Boolean(drive) };
+  const formExtra = { photos, setPhotos, aiAvailable: Boolean(imageGen) };
 
   return (
     <div className={`ss ss-${screen}`}>
-      <Header mode={mode} appName={appName} modeSwitch={modeSwitch} onHome={() => setScreen(result ? 'gallery' : 'form')} />
+      {header !== undefined ? header : <Header mode={mode} appName={appName} modeSwitch={modeSwitch} onHome={() => setScreen(result ? 'gallery' : 'form')} />}
       {banner && screen === 'form' && <div className="banner">{banner}</div>}
       <main className="app-main">
         {screen === 'form' &&
@@ -707,8 +606,6 @@ export default function App({ mode = 'client', runner = null, imagesFn = null, i
             onRegenerate={() => run()}
             imgStatus={imgStatus}
             onRetryImages={imageGen && agency ? () => startImages(result.content) : imgStatus.state === 'failed' && imageGen ? () => startImages(result.content) : null}
-            driveStatus={driveStatus}
-            onRetryDrive={() => syncDrive()}
           />
         )}
         {screen === 'final' && result && chosen && (
@@ -728,9 +625,6 @@ export default function App({ mode = 'client', runner = null, imagesFn = null, i
             onUpdateModel={updateModel}
             imgStatus={imgStatus}
             onRetryImages={imageGen && (agency || imgStatus.state === 'failed') ? () => startImages(result.content) : null}
-            onZip={(blob) => zipToDrive(blob, chosen)}
-            driveStatus={driveStatus}
-            onRetryDrive={() => syncDrive()}
           />
         )}
       </main>

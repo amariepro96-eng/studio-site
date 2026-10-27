@@ -19,9 +19,6 @@ export function config() {
     agencyPassword: process.env.AGENCY_PASSWORD || '',
     // Nombre de générations complètes autorisées par visiteur et par heure
     generationsPerHour: Math.max(1, parseInt(process.env.GENERATIONS_PER_HOUR || '20', 10) || 20),
-    // Enregistrement automatique dans Google Drive (script « Automatisation dossiers clients »)
-    driveUrl: (process.env.DRIVE_WEBHOOK_URL || '').trim(),
-    driveSecret: (process.env.DRIVE_WEBHOOK_SECRET || '').trim(),
   };
 }
 

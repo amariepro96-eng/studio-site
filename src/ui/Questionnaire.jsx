@@ -3,11 +3,8 @@ import { useState, useRef } from 'react';
 import { STEPS, validateStep, validateBrief, EXAMPLES, emptyBrief } from '../engine/questions.js';
 import { prepareImage, MAX_PHOTOS } from '../ai/images.js';
 
-// Photos du client : redimensionnées dans le navigateur. Elles ne quittent l'appareil
-// que si l'enregistrement dans Google Drive est configuré (le texte d'aide l'indique).
-const HINT_DRIVE = 'Jusqu’à 10 photos : votre lieu, votre équipe au travail, vos réalisations, vos produits. Elles nous sont transmises avec vos réponses pour préparer votre site.';
-
-function PhotoField({ f, photos, setPhotos, driveEnabled = false }) {
+// Envoi des photos du client : redimensionnées dans le navigateur, jamais envoyées au serveur
+function PhotoField({ f, photos, setPhotos }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [over, setOver] = useState(false);
@@ -59,7 +56,7 @@ function PhotoField({ f, photos, setPhotos, driveEnabled = false }) {
   return (
     <fieldset className="q-field">
       <legend className="q-label">{f.label}</legend>
-      <p className="q-hint">{driveEnabled ? HINT_DRIVE : f.hint}</p>
+      <p className="q-hint">{f.hint}</p>
       <label
         className={`dropzone${over ? ' over' : ''}${left <= 0 ? ' full' : ''}`}
         onDragOver={(e) => {
@@ -123,9 +120,12 @@ function ToggleField({ f, brief, set, aiAvailable }) {
   );
 }
 
-function Field({ f, brief, set, error, extra = {} }) {
+export function Field({ f, brief, set, error, extra = {} }) {
   if (f.showIf && !f.showIf(brief)) return null;
-  if (f.type === 'photos') return <PhotoField f={f} photos={extra.photos || []} setPhotos={extra.setPhotos || (() => {})} driveEnabled={!!extra.driveEnabled} />;
+  if (f.type === 'photos' && extra.renderPhotos) return extra.renderPhotos(f, error);
+  if (f.type === 'photos') return <PhotoField f={f} photos={extra.photos || []} setPhotos={extra.setPhotos || (() => {})} />;
+  if (f.type === 'logo') return extra.renderLogo ? extra.renderLogo(f, error) : null;
+  if (f.type === 'toggle' && extra.hideUnavailable && !extra.aiAvailable) return null;
   if (f.type === 'toggle') return <ToggleField f={f} brief={brief} set={set} aiAvailable={!!extra.aiAvailable} />;
   const v = brief[f.id];
   const id = `q-${f.id}`;
@@ -256,7 +256,7 @@ function Field({ f, brief, set, error, extra = {} }) {
       return (
         <div className={cls}>
           {head}
-          <input id={id} type={f.type === 'email' ? 'email' : 'text'} value={v} placeholder={f.placeholder} onChange={(e) => set(f.id, e.target.value)} aria-invalid={!!error} aria-describedby={describedBy} autoComplete="off" />
+          <input id={id} type={f.type === 'email' ? 'email' : 'text'} inputMode={f.inputMode} value={v ?? ''} placeholder={f.placeholder} onChange={(e) => set(f.id, e.target.value)} aria-invalid={!!error} aria-describedby={describedBy} autoComplete="off" />
           {err}
         </div>
       );
@@ -264,12 +264,14 @@ function Field({ f, brief, set, error, extra = {} }) {
 }
 
 // ----- Mode client : une étape par écran -----
-export function ClientStepper({ brief, setBrief, onSubmit, error, initialStep = 0, extra }) {
+export function ClientStepper({ brief, setBrief, onSubmit, error, initialStep = 0, extra, steps = STEPS, intro, submitLabel = 'Créer mes 10 propositions', onNext, busy = false }) {
   const [step, setStep] = useState(initialStep);
   const [errors, setErrors] = useState({});
+  const [saving, setSaving] = useState(false);
   const top = useRef(null);
-  const s = STEPS[step];
-  const last = step === STEPS.length - 1;
+  const STEPS_ = steps;
+  const s = STEPS_[step];
+  const last = step === STEPS_.length - 1;
   const set = (k, val) => {
     setBrief((b) => ({ ...b, [k]: val }));
     if (errors[k]) setErrors((e) => ({ ...e, [k]: undefined }));
@@ -279,19 +281,29 @@ export function ClientStepper({ brief, setBrief, onSubmit, error, initialStep = 
     setErrors({});
     top.current?.scrollIntoView({ block: 'start', behavior: 'smooth' });
   };
-  function next(e) {
+  async function next(e) {
     e.preventDefault();
+    if (saving || busy) return;
     const errs = validateStep(s, brief);
     if (Object.keys(errs).length) {
       setErrors(errs);
+      document.getElementById(`q-${Object.keys(errs)[0]}`)?.focus();
       return;
     }
-    if (last) onSubmit();
-    else go(step + 1);
+    if (last) return onSubmit();
+    // Sauvegarde à chaque étape (questionnaire envoyé au client)
+    if (onNext) {
+      setSaving(true);
+      const okSave = await onNext(step + 1).catch(() => false);
+      setSaving(false);
+      if (!okSave) return;
+    }
+    go(step + 1);
   }
   return (
     <div className="stepper" ref={top}>
-      {step === 0 && (
+      {step === 0 && intro !== undefined && intro}
+      {step === 0 && intro === undefined && (
         <div className="welcome">
           <h1>Votre site internet, prêt en quelques minutes</h1>
           <p>Répondez à quelques courtes séries de questions. Nous vous proposons ensuite 10 modèles différents, rédigés pour votre activité.</p>
@@ -300,8 +312,8 @@ export function ClientStepper({ brief, setBrief, onSubmit, error, initialStep = 
           </button>
         </div>
       )}
-      <div className="progress" aria-label={`Étape ${step + 1} sur ${STEPS.length}`} style={{ gridTemplateColumns: `repeat(${STEPS.length}, 1fr)` }}>
-        {STEPS.map((x, i) => (
+      <div className="progress" aria-label={`Étape ${step + 1} sur ${STEPS_.length}`} style={{ gridTemplateColumns: `repeat(${STEPS_.length}, 1fr)` }}>
+        {STEPS_.map((x, i) => (
           <button key={x.id} type="button" className={`progress-step${i === step ? ' current' : ''}${i < step ? ' done' : ''}`} onClick={() => i < step && go(i)} disabled={i > step} aria-current={i === step ? 'step' : undefined}>
             <span className="progress-bar" />
             <span className="progress-label">{x.title}</span>
@@ -310,7 +322,7 @@ export function ClientStepper({ brief, setBrief, onSubmit, error, initialStep = 
       </div>
       <form className="card step-card" onSubmit={next} noValidate>
         <p className="step-count">
-          Étape {step + 1} sur {STEPS.length}
+          Étape {step + 1} sur {STEPS_.length}
         </p>
         <h2>{s.title}</h2>
         <p className="step-intro">{s.intro}</p>
@@ -320,11 +332,6 @@ export function ClientStepper({ brief, setBrief, onSubmit, error, initialStep = 
             <Field key={f.id} f={f} brief={brief} set={set} error={errors[f.id]} extra={extra} />
           ))}
         </div>
-        {last && extra?.driveEnabled && (
-          <p className="q-consent">
-            En cliquant sur « Créer mes 10 propositions », vous acceptez que vos réponses et vos photos nous soient transmises. Elles servent uniquement à préparer votre site.
-          </p>
-        )}
         <div className="step-nav">
           {step > 0 ? (
             <button type="button" className="btn secondary" onClick={() => go(step - 1)}>
@@ -333,8 +340,8 @@ export function ClientStepper({ brief, setBrief, onSubmit, error, initialStep = 
           ) : (
             <span />
           )}
-          <button type="submit" className="btn primary">
-            {last ? 'Créer mes 10 propositions' : 'Continuer'}
+          <button type="submit" className="btn primary" disabled={saving || busy}>
+            {saving ? 'Enregistrement…' : busy ? 'Envoi…' : last ? submitLabel : 'Continuer'}
           </button>
         </div>
       </form>
@@ -343,7 +350,7 @@ export function ClientStepper({ brief, setBrief, onSubmit, error, initialStep = 
 }
 
 // ----- Mode agence : tout le brief sur une page -----
-export function AgencyForm({ brief, setBrief, onSubmit, error, extra }) {
+export function AgencyForm({ brief, setBrief, onSubmit, error, extra, steps = STEPS, title = 'Nouveau brief client', intro = 'Remplissez le brief avec votre client ou à partir de vos notes, puis générez les 10 modèles.', submitLabel = 'Générer les 10 modèles', barText = 'Les 10 modèles sont générés en une fois.', onCancel, examples = true, busy = false }) {
   const [errors, setErrors] = useState({});
   const set = (k, val) => {
     setBrief((b) => ({ ...b, [k]: val }));
@@ -351,7 +358,7 @@ export function AgencyForm({ brief, setBrief, onSubmit, error, extra }) {
   };
   function submit(e) {
     e.preventDefault();
-    const errs = validateBrief(brief);
+    const errs = validateBrief(brief, steps);
     setErrors(errs);
     const first = Object.keys(errs)[0];
     if (first) {
@@ -364,10 +371,17 @@ export function AgencyForm({ brief, setBrief, onSubmit, error, extra }) {
     <form className="agency" onSubmit={submit} noValidate>
       <div className="agency-head">
         <div>
-          <h1>Nouveau brief client</h1>
-          <p>Remplissez le brief avec votre client ou à partir de vos notes, puis générez les 10 modèles.</p>
+          <h1>{title}</h1>
+          <p>{intro}</p>
         </div>
         <div className="agency-head-actions">
+          {onCancel && (
+            <button type="button" className="btn secondary" onClick={onCancel}>
+              Annuler
+            </button>
+          )}
+          {examples && (
+            <>
           <button type="button" className="btn secondary" onClick={() => setBrief({ ...EXAMPLES[Math.floor(Math.random() * EXAMPLES.length)] })}>
             Remplir avec un exemple
           </button>
@@ -381,10 +395,12 @@ export function AgencyForm({ brief, setBrief, onSubmit, error, extra }) {
           >
             Vider le brief
           </button>
+            </>
+          )}
         </div>
       </div>
       {error && <div className="alert">{error}</div>}
-      {STEPS.map((s) => (
+      {steps.map((s) => (
         <section key={s.id} className="card agency-section">
           <div className="agency-section-head">
             <h2>{s.title}</h2>
@@ -398,9 +414,9 @@ export function AgencyForm({ brief, setBrief, onSubmit, error, extra }) {
         </section>
       ))}
       <div className="sticky-bar">
-        <p>{Object.keys(errors).filter((k) => errors[k]).length ? 'Certains champs obligatoires sont vides.' : extra?.driveEnabled ? 'Les 10 modèles sont générés en une fois. Le brief et les photos sont enregistrés dans le Drive.' : 'Les 10 modèles sont générés en une fois.'}</p>
-        <button type="submit" className="btn primary">
-          Générer les 10 modèles
+        <p>{Object.keys(errors).filter((k) => errors[k]).length ? 'Certains champs sont à compléter ou à corriger.' : barText}</p>
+        <button type="submit" className="btn primary" disabled={busy}>
+          {busy ? 'Enregistrement…' : submitLabel}
         </button>
       </div>
     </form>

@@ -203,14 +203,15 @@ function sectionHead(title, intro, center) {
 // ---------- Blocs ----------
 
 function header(ctx) {
-  const { m, arch, brief, pages, link, page, name } = ctx;
+  const { m, arch, brief, pages, link, page, name, mode } = ctx;
   const v = m.variants.nav;
   const cta = primaryCta(ctx);
   const linksHtml = pages
     .filter((p) => p.slug !== 'index')
     .map((p) => `<li><a ${link(p.slug)}${p.slug === page ? ' aria-current="page"' : ''}>${esc(p.label)}</a></li>`)
     .join('');
-  const logo = `<a class="logo" ${link('index')}>${esc(name)}</a>`;
+  const logoSrc = mode === 'export' ? brief.logoFile : brief.logoUrl;
+  const logo = logoSrc ? `<a class="logo logo-img" ${link('index')}><img src="${esc(logoSrc)}" alt="${esc(name)}"></a>` : `<a class="logo" ${link('index')}>${esc(name)}</a>`;
   const burger = `<button class="burger" type="button" aria-label="Ouvrir le menu" aria-expanded="false" data-burger>${icon('menu', { size: 22 })}</button>`;
   const ctaBtn = `<a class="btn small" ${cta.href}>${esc(cta.label)}</a>`;
   let inner;
@@ -520,11 +521,22 @@ function infoStrip(ctx, alt) {
   return `<section class="section${alt ? ' alt' : ''}"><div class="wrap info-strip">${items.join('')}</div></section>`;
 }
 
+// Lien externe sûr : http(s) uniquement, « https:// » ajouté s'il manque
+function safeHref(raw) {
+  const v = String(raw || '').trim();
+  if (!v) return '';
+  if (/^https?:\/\//i.test(v)) return v;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(v)) return '';
+  return 'https://' + v.replace(/^\/+/, '');
+}
+
 function socials(ctx) {
   const { brief } = ctx;
   const out = [];
-  if (brief.instagram) out.push(`<a href="${esc(brief.instagram)}" target="_blank" rel="noopener" aria-label="Instagram">${icon('instagram', { size: 18 })}</a>`);
-  if (brief.facebook) out.push(`<a href="${esc(brief.facebook)}" target="_blank" rel="noopener" aria-label="Facebook">${icon('facebook', { size: 18 })}</a>`);
+  const instagram = safeHref(brief.instagram);
+  const facebook = safeHref(brief.facebook);
+  if (instagram) out.push(`<a href="${esc(instagram)}" target="_blank" rel="noopener" aria-label="Instagram">${icon('instagram', { size: 18 })}</a>`);
+  if (facebook) out.push(`<a href="${esc(facebook)}" target="_blank" rel="noopener" aria-label="Facebook">${icon('facebook', { size: 18 })}</a>`);
   return out.length ? `<div class="socials">${out.join('')}</div>` : '';
 }
 
@@ -716,11 +728,18 @@ function contactBody(ctx) {
 function legalBody(ctx) {
   const { brief, name } = ctx;
   const todo = (s) => `<span class="todo">[${esc(s)}]</span>`;
+  const val = (k, label) => (String(brief[k] || '').trim() ? esc(brief[k]) : todo(label));
+  // Infos légales venues du questionnaire ; ce qui manque reste entre crochets
+  const form = String(brief.legalForm || '').trim();
+  const capital = String(brief.capital || '').trim();
+  const status = form ? esc(form) + (capital ? ` au capital de ${esc(capital)}` : '') : todo('forme juridique et capital');
+  const seat = String(brief.siege || '').trim() || String(brief.address || '').trim();
+  const register = /^EI|association/i.test(form) && !String(brief.rcs || '').trim() ? '' : ` — RCS ${val('rcs', 'ville')}`;
   return (
     pageHero(ctx, 'Mentions légales', '') +
     `<section class="section"><div class="wrap legal">
-<h2>Éditeur du site</h2><p>${esc(name)} — ${todo('forme juridique et capital')}<br>Siège : ${brief.address ? esc(brief.address) : todo('adresse')}<br>SIRET : ${todo('numéro SIRET')} — RCS ${todo('ville')}<br>Directeur de la publication : ${todo('nom du dirigeant')}<br>Contact : ${brief.email ? esc(brief.email) : todo('e-mail')}${brief.phone ? ' — ' + esc(brief.phone) : ''}</p>
-<h2>Hébergement</h2><p>${todo('Nom, adresse et téléphone de l’hébergeur')}</p>
+<h2>Éditeur du site</h2><p>${esc(String(brief.legalName || '').trim() || name)} — ${status}<br>Siège : ${seat ? esc(seat) : todo('adresse')}<br>SIRET : ${val('siret', 'numéro SIRET')}${register}<br>Directeur de la publication : ${val('publisher', 'nom du dirigeant')}<br>Contact : ${brief.email ? esc(brief.email) : todo('e-mail')}${brief.phone ? ' — ' + esc(brief.phone) : ''}</p>
+<h2>Hébergement</h2><p>${String(brief.hosting || '').trim() ? esc(brief.hosting) : todo('Nom, adresse et téléphone de l’hébergeur')}</p>
 <h2>Propriété intellectuelle</h2><p>L’ensemble des contenus de ce site (textes, visuels, logo) est la propriété de ${esc(name)}, sauf mention contraire. Toute reproduction sans autorisation est interdite.</p>
 <h2>Données personnelles</h2><p>Les informations transmises via les formulaires servent uniquement à répondre à vos demandes. Elles ne sont ni vendues ni cédées. Conformément au RGPD, vous pouvez demander l’accès, la rectification ou la suppression de vos données en écrivant à ${brief.email ? esc(brief.email) : todo('e-mail')}.</p>
 <h2>Cookies</h2><p>Ce site n’utilise pas de cookies de mesure d’audience ni de publicité. Les polices de caractères sont chargées depuis Google Fonts.</p>
