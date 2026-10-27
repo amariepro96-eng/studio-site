@@ -1224,6 +1224,8 @@ body {
 /* Versions d'un style, dans « Voir en grand » */
 .vtabs {
   display: inline-flex;
+  max-width: 100%;
+  overflow-x: auto;
   gap: 2px;
   padding: 3px;
   border-radius: 10px;
@@ -2241,11 +2243,9 @@ body {
   .modal .toolbar .seg {
     display: none;
   }
-  .v-word {
-    display: none;
-  }
   .vtabs button {
-    min-width: 34px;
+    padding: 6px 9px;
+    font-size: 0.82rem;
   }
   .journey {
     grid-template-columns: repeat(2, minmax(0, 1fr));

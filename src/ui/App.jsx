@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { emptyBrief, STEPS } from '../engine/questions.js';
 import { ARCHETYPE_MAP } from '../engine/archetypes.js';
-import { modelName, insertVersions, versionsOf, baseOf } from '../engine/variants.js';
+import { modelName, insertVersions, versionsOf, baseOf, versionLabel } from '../engine/variants.js';
 import { renderPage, sitePages, resolveModel } from '../engine/render.js';
 import { buildZip, zipName } from '../engine/zip.js';
 import { generateSite, PART_LABELS } from '../ai/generate.js';
@@ -41,7 +41,7 @@ export function varyModel(m) {
 }
 
 export function nextPalette(m) {
-  const n = ARCHETYPE_MAP[m.archetype]?.palettes.length || 1;
+  const n = resolveModel(m).arch.palettes.length || 1;
   return { ...m, paletteIndex: ((m.paletteIndex ?? resolveModel(m).paletteIndex) + 1) % n };
 }
 
@@ -203,9 +203,8 @@ export function PreviewModal({ models, index, setIndex, brief, content, images, 
           {versions.length > 1 && (
             <div className="vtabs" role="group" aria-label="Versions de ce style">
               {versions.map((v, i) => (
-                <button key={v.id} type="button" aria-pressed={i === vIndex} onClick={() => setVIndex(i)}>
-                  <span className="v-word">Version </span>
-                  {i + 1}
+                <button key={v.id} type="button" aria-pressed={i === vIndex} onClick={() => setVIndex(i)} title={archName(v)}>
+                  {versionLabel(v, i)}
                 </button>
               ))}
             </div>

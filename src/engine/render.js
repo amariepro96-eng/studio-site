@@ -1,20 +1,25 @@
 // Moteur de rendu : transforme (brief + contenus + modèle) en pages HTML complètes.
 import { ARCHETYPES, ARCHETYPE_MAP } from './archetypes.js';
 import { COMPOSITIONS, DECO_SHAPES, DIVIDER_PATHS } from './compositions.js';
+import { flavorOf, applyFlavor, applyFlavorComp } from './flavors.js';
 import { BASE_CSS } from './css.js';
 import { art } from './art.js';
 import { icon } from './icons.js';
 import { esc, rng, pick, formatPrice, priceNumber, slugify, lines, hashString } from './util.js';
 import { mix, onColor, ensureContrast, isHex, luminance, alpha } from './color.js';
 
-const SERIF_FONTS = ['Fraunces', 'Cormorant Garamond', 'Young Serif', 'Lora', 'Alfa Slab One', 'Marcellus'];
+const SERIF_FONTS = ['Fraunces', 'Cormorant Garamond', 'Young Serif', 'Lora', 'Alfa Slab One', 'Marcellus', 'Shippori Mincho', 'Playfair Display', 'Source Serif 4', 'Instrument Serif', 'Libre Caslon Display', 'Libre Caslon Text', 'Bodoni Moda', 'Cinzel', 'DM Serif Display', 'Alegreya', 'Zilla Slab', 'Gilda Display', 'EB Garamond', 'Libre Baskerville', 'Abril Fatface', 'Limelight', 'Prata', 'Italiana'];
 const LIGHT_ART = ['serif', 'soft', 'grid', 'leaf', 'blob', 'arch', 'confetti', 'sunset'];
 
 // ---------- Modèle & thème ----------
 
 export function resolveModel(model) {
-  const arch = ARCHETYPE_MAP[model.archetype] || ARCHETYPES[0];
-  const comp = COMPOSITIONS[arch.id] || COMPOSITIONS.epure;
+  const baseArch = ARCHETYPE_MAP[model.archetype] || ARCHETYPES[0];
+  const baseComp = COMPOSITIONS[baseArch.id] || COMPOSITIONS.epure;
+  // Déclinaison (versions 2 à 4) : polices, palettes, formes et compositions propres
+  const flavor = model.flavor ? flavorOf(baseArch.id, model.flavor) : null;
+  const arch = flavor ? applyFlavor(baseArch, flavor) : baseArch;
+  const comp = flavor ? applyFlavorComp(baseComp, flavor) : baseComp;
   const seed = Number(model.seed) || 0;
   const rand = rng(seed * 131 + arch.id.length * 7 + 3);
   const choose = (list) => (seed === 0 ? list[0] : pick(list, rand));
@@ -32,7 +37,7 @@ export function resolveModel(model) {
   const offerTok = tokens.find((x) => x.name === 'offer');
   const offerVariant = offerTok?.v || variants.services;
   const paletteIndex = Number.isInteger(model.paletteIndex) ? model.paletteIndex : seed % arch.palettes.length;
-  return { ...model, seed, arch, comp, variants, tokens, offerVariant, paletteIndex };
+  return { ...model, seed, arch, comp, flavor, variants, tokens, offerVariant, paletteIndex };
 }
 
 export function computeTheme(arch, paletteIndex, brandColor) {
@@ -805,7 +810,7 @@ export function renderPage(slug, { brief, content, model, images, mode = 'previe
   const description = content.seo?.description || content.brand?.short || brief.description || '';
   const shop = brief.siteType === 'boutique' && (content.products || []).length ? cartUi(ctx) : '';
   const stripes = arch.stripes ? '<div class="stripes"></div>' : '';
-  return `<!doctype html><html lang="fr" class="a-${arch.id} nav-${m.variants.nav}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title><meta name="description" content="${esc(String(description).slice(0, 160))}"><link rel="icon" href="${favicon(name, t)}"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="${fontsHref(arch)}"><style>${cssVars(arch, t)}${BASE_CSS}${arch.css}${m.comp.css || ''}</style></head><body><a class="skip" href="#main">Aller au contenu</a>${header(ctx)}<main id="main">${body}</main>${stripes}${footer(ctx)}${shop}<script>${SCRIPT(mode !== 'export')}</script></body></html>`;
+  return `<!doctype html><html lang="fr" class="a-${arch.id}${m.flavor ? ' fl-' + m.flavor.id : ''} nav-${m.variants.nav}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title><meta name="description" content="${esc(String(description).slice(0, 160))}"><link rel="icon" href="${favicon(name, t)}"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="${fontsHref(arch)}"><style>${cssVars(arch, t)}${BASE_CSS}${arch.css}${m.comp.css || ''}</style></head><body><a class="skip" href="#main">Aller au contenu</a>${header(ctx)}<main id="main">${body}</main>${stripes}${footer(ctx)}${shop}<script>${SCRIPT(mode !== 'export')}</script></body></html>`;
 }
 
 export function allPageSlugs(brief, content) {
