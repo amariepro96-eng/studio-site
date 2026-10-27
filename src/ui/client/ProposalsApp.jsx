@@ -8,7 +8,7 @@ import { PreviewModal, archName } from '../App.jsx';
 import { renderPage } from '../../engine/render.js';
 import { renderImages, renderBrief } from '../../engine/records.js';
 
-function ChooseDialog({ model, index, onCancel, onConfirm, busy, error, owner }) {
+function ChooseDialog({ model, kicker, onCancel, onConfirm, busy, error, owner }) {
   const [comment, setComment] = useState('');
   return (
     <div className="sheet-backdrop" role="presentation" onClick={(e) => e.target === e.currentTarget && !busy && onCancel()}>
@@ -22,7 +22,7 @@ function ChooseDialog({ model, index, onCancel, onConfirm, busy, error, owner })
           onConfirm(comment);
         }}
       >
-        <p className="sheet-kicker">Proposition {index + 1}</p>
+        <p className="sheet-kicker">{kicker}</p>
         <h2 id="choose-title">Vous choisissez le modèle {archName(model)}</h2>
         <div className="q-field">
           <label className="q-label" htmlFor="choice-comment">
@@ -77,7 +77,7 @@ export default function ProposalsApp({ id }) {
     setBusy(true);
     setChooseError('');
     try {
-      const d = await api(`/api/p/${id}`, { method: 'POST', body: { modelId: client.models[choosing].id, comment } });
+      const d = await api(`/api/p/${id}`, { method: 'POST', body: { modelId: choosing.model.id, comment } });
       setData((x) => ({ ...x, client: d.client }));
       setChoosing(null);
       setOpen(null);
@@ -118,8 +118,10 @@ export default function ProposalsApp({ id }) {
     );
   }
 
-  const chosenIndex = client.choice ? client.models.findIndex((m) => m.id === client.choice.modelId) : -1;
-  const chosen = chosenIndex >= 0 ? client.models[chosenIndex] : null;
+  const chosen = client.chosenModel || null;
+  const chosenThumb = chosen && origin ? renderPage('index', { brief, content: client.content, model: chosen, images, mode: 'preview', imageSize: 'thumb' }) : '';
+  // Proposition à laquelle appartient le modèle choisi (lui-même ou l'une de ses versions)
+  const isChosen = (m) => chosen && (chosen.id === m.id || (chosen.variantOf && (chosen.variantOf === m.id || chosen.variantOf === m.variantOf)));
 
   if (client.status === 'live') {
     return (
@@ -154,7 +156,7 @@ export default function ProposalsApp({ id }) {
           <h1>C’est noté : vous avez choisi le modèle {archName(chosen)}</h1>
           <p className="lead">{owner} s’occupe maintenant de tout : finitions, nom de domaine et mise en ligne. Vous recevrez un lien pour vérifier votre site avant sa publication.</p>
           <div className="chosen-preview">
-            <ThumbFrame html={thumbs[chosenIndex]} title={`Aperçu ${archName(chosen)}`} />
+            <ThumbFrame html={chosenThumb} title={`Aperçu ${archName(chosen)}`} />
           </div>
           {client.choice.comment && <blockquote>{client.choice.comment}</blockquote>}
           <ol className="journey">
@@ -185,11 +187,11 @@ export default function ProposalsApp({ id }) {
               <figcaption>{owner}</figcaption>
             </figure>
           )}
-          <p className="muted">Touchez une proposition pour la voir en grand et parcourir toutes ses pages.</p>
+          <p className="muted">Touchez une proposition pour la voir en grand et parcourir toutes ses pages. Chaque proposition existe en 4 versions : passez de l’une à l’autre en haut de l’aperçu.</p>
         </div>
         <div className={`proposal-grid n${client.models.length}`}>
           {client.models.map((m, i) => (
-            <article key={m.id} className={`proposal${chosen?.id === m.id ? ' is-chosen' : ''}`}>
+            <article key={m.id} className={`proposal${isChosen(m) ? ' is-chosen' : ''}`}>
               <button type="button" className="model-thumb" onClick={() => setOpen(i)} aria-label={`Voir la proposition ${i + 1} en grand`}>
                 <ThumbFrame html={thumbs[i]} title={`Aperçu ${archName(m)}`} />
               </button>
@@ -203,7 +205,7 @@ export default function ProposalsApp({ id }) {
                   <button type="button" className="btn secondary small" onClick={() => setOpen(i)}>
                     Voir en grand
                   </button>
-                  <button type="button" className="btn primary small" onClick={() => setChoosing(i)}>
+                  <button type="button" className="btn primary small" onClick={() => setChoosing({ model: m, kicker: `Proposition ${i + 1}` })}>
                     {chosen?.id === m.id ? 'Mon choix actuel' : 'Choisir ce modèle'}
                   </button>
                 </div>
@@ -221,17 +223,19 @@ export default function ProposalsApp({ id }) {
           content={client.content}
           images={images}
           onClose={() => setOpen(null)}
+          withVersions
+          pool={client.bases || []}
           renderAction={(m) => (
-            <button type="button" className="btn primary small" onClick={() => setChoosing(client.models.findIndex((x) => x.id === m.id))}>
-              Choisir ce modèle
+            <button type="button" className="btn primary small" onClick={() => setChoosing({ model: m, kicker: `Proposition ${open + 1}` })}>
+              {chosen?.id === m.id ? 'Mon choix actuel' : 'Choisir cette version'}
             </button>
           )}
         />
       )}
       {choosing !== null && (
         <ChooseDialog
-          model={client.models[choosing]}
-          index={choosing}
+          model={choosing.model}
+          kicker={choosing.kicker}
           owner={owner}
           busy={busy}
           error={chooseError}

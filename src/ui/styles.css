@@ -1177,6 +1177,7 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
 }
 .toolbar-title {
   display: flex;
@@ -1219,6 +1220,34 @@ body {
   cursor: pointer;
   color: var(--muted);
   white-space: nowrap;
+}
+/* Versions d'un style, dans « Voir en grand » */
+.vtabs {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+}
+.vtabs button {
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 600;
+  padding: 6px 10px;
+  border-radius: 7px;
+  cursor: pointer;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.vtabs button:hover {
+  color: var(--ink);
+}
+.vtabs button[aria-pressed='true'] {
+  background: var(--accent);
+  color: #fff;
 }
 .tabs button[aria-selected='true'],
 .seg button[aria-pressed='true'] {
@@ -2211,6 +2240,12 @@ body {
   }
   .modal .toolbar .seg {
     display: none;
+  }
+  .v-word {
+    display: none;
+  }
+  .vtabs button {
+    min-width: 34px;
   }
   .journey {
     grid-template-columns: repeat(2, minmax(0, 1fr));

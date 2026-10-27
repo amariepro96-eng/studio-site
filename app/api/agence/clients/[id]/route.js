@@ -9,7 +9,7 @@ const TEXT = { name: 120, contact: 200, formula: 60, message: 4000, liveUrl: 300
 
 function cleanResult(r) {
   if (!r || typeof r !== 'object' || !Array.isArray(r.models) || !r.content) return null;
-  return { content: r.content, models: r.models.slice(0, 12), source: r.source === 'ai' ? 'ai' : 'demo', warnings: Array.isArray(r.warnings) ? r.warnings.slice(0, 5) : [] };
+  return { content: r.content, models: r.models.slice(0, 60), source: r.source === 'ai' ? 'ai' : 'demo', warnings: Array.isArray(r.warnings) ? r.warnings.slice(0, 5) : [] };
 }
 
 export const GET = route(

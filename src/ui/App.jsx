@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { emptyBrief, STEPS } from '../engine/questions.js';
 import { ARCHETYPE_MAP } from '../engine/archetypes.js';
+import { modelName, insertVersions, versionsOf, baseOf } from '../engine/variants.js';
 import { renderPage, sitePages, resolveModel } from '../engine/render.js';
 import { buildZip, zipName } from '../engine/zip.js';
 import { generateSite, PART_LABELS } from '../ai/generate.js';
@@ -26,7 +27,7 @@ const store = {
   },
 };
 
-export const archName = (m) => ARCHETYPE_MAP[m.archetype]?.name || m.archetype;
+export const archName = (m) => modelName(m);
 
 // Nouvelle mise en page pour le même modèle (on garde la palette)
 export function varyModel(m) {
@@ -161,8 +162,15 @@ function ModelCard({ model, index, brief, content, images, agency, onOpen, onCho
   );
 }
 
-export function PreviewModal({ models, index, setIndex, brief, content, images, onChoose, onClose, renderAction, label }) {
-  const model = models[index];
+// withVersions : chaque style se parcourt en 4 versions (onglets « Version 1 » à « Version 4 »)
+// pool : modèles où chercher le modèle de départ d'une version (en plus de `models`)
+export function PreviewModal({ models, index, setIndex, brief, content, images, onChoose, onClose, renderAction, label, withVersions = false, pool = [] }) {
+  const current = models[index];
+  const base = withVersions ? baseOf(current, [...models, ...pool]) : current;
+  const versions = useMemo(() => (withVersions ? versionsOf(base) : [current]), [withVersions, base, current]);
+  const [vIndex, setVIndex] = useState(() => versions.findIndex((v) => v.id === current.id));
+  useEffect(() => setVIndex(versions.findIndex((v) => v.id === current.id)), [index]); // eslint-disable-line react-hooks/exhaustive-deps
+  const model = versions[vIndex] || current;
   const [page, setPage] = useState('index');
   const [device, setDevice] = useState('desktop');
   const pages = useMemo(() => sitePages(brief, content), [brief, content]);
@@ -192,6 +200,16 @@ export function PreviewModal({ models, index, setIndex, brief, content, images, 
           <button type="button" className="icon-btn" onClick={() => setIndex((index + 1) % models.length)} aria-label="Modèle suivant">
             ›
           </button>
+          {versions.length > 1 && (
+            <div className="vtabs" role="group" aria-label="Versions de ce style">
+              {versions.map((v, i) => (
+                <button key={v.id} type="button" aria-pressed={i === vIndex} onClick={() => setVIndex(i)}>
+                  <span className="v-word">Version </span>
+                  {i + 1}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         <PageTabs pages={pages} value={page} onChange={setPage} />
         <div className="toolbar-right">
@@ -307,6 +325,7 @@ function Gallery({ result, brief, images, agency, onChoose, onUpdateModel, onEdi
             onChoose(m);
           }}
           onClose={() => setOpen(null)}
+          withVersions
         />
       )}
     </div>
@@ -557,6 +576,11 @@ export default function App({ mode = 'client', runner = null, imagesFn = null, i
     setResult((r) => ({ ...r, models: r.models.map((x) => (x.id === m.id ? m : x)) }));
   }
 
+  // Une version choisie dans « Voir en grand » rejoint la galerie (juste après son style)
+  function ensureInGallery(m) {
+    setResult((r) => (r.models.some((x) => x.id === m.id) ? r : { ...r, models: insertVersions(r.models, baseOf(m, r.models), [m]) }));
+  }
+
   const chosen = result?.models.find((m) => m.id === chosenId) || null;
   const formExtra = { photos, setPhotos, aiAvailable: Boolean(imageGen) };
 
@@ -594,6 +618,7 @@ export default function App({ mode = 'client', runner = null, imagesFn = null, i
             agency={agency}
             warnings={[...(result.source === 'demo' && runner ? ['Textes génériques : relancez la génération pour obtenir des textes rédigés par l’IA.'] : []), ...result.warnings]}
             onChoose={(m) => {
+              ensureInGallery(m);
               setChosenId(m.id);
               setScreen('final');
             }}

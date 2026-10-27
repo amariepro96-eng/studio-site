@@ -13,6 +13,7 @@ import { renderPage, sitePages } from '../../engine/render.js';
 import { buildZip, zipName } from '../../engine/zip.js';
 import { generateSite, apiRunner, apiImages } from '../../ai/generate.js';
 import { apiImageGen, aiImagesNeeded, generateImages } from '../../ai/images.js';
+import { insertVersions, baseOf } from '../../engine/variants.js';
 import { stageOf, renderImages, renderBrief, timeAgo, CHECKS, MIN_PICK, MAX_PICK, plural } from '../../engine/records.js';
 
 const STEPS7 = remoteSteps({ strict: false });
@@ -142,7 +143,7 @@ function Answers({ rec, srcOf }) {
 }
 
 // ---------- Sélection des modèles ----------
-function SelectCard({ model, index, html, picked, onToggle, onOpen, onVary, onPalette, full }) {
+function SelectCard({ model, index, html, picked, onToggle, onOpen, onVary, onPalette, onRemove, full }) {
   return (
     <article className={`model-card${picked ? ' picked' : ''}`}>
       <button type="button" className="model-thumb" onClick={onOpen} aria-label={`Voir le modèle ${archName(model)} en grand`}>
@@ -169,6 +170,11 @@ function SelectCard({ model, index, html, picked, onToggle, onOpen, onVary, onPa
           <button type="button" className="btn-text small" onClick={onPalette}>
             Autre palette
           </button>
+          {onRemove && (
+            <button type="button" className="btn-text small quiet" onClick={onRemove}>
+              Retirer
+            </button>
+          )}
         </div>
       </div>
     </article>
@@ -191,9 +197,20 @@ function SelectPanel({ rec, settings, brief, images, save, onRegenerate, imgStat
   const composer = useRef(null);
   const content = rec.result.content;
   const full = picked.length >= MAX_PICK;
-  const toggle = (m) => setPicked((p) => (p.includes(m.id) ? p.filter((x) => x !== m.id) : p.length >= MAX_PICK ? p : [...p, m.id]));
+  const toggle = (m) => {
+    // Une version retenue dans « Voir en grand » rejoint la galerie, juste après son style
+    if (!models.some((x) => x.id === m.id)) {
+      if (picked.length >= MAX_PICK) return;
+      save({ result: { ...rec.result, models: insertVersions(models, baseOf(m, models), [m]) } }, null, true);
+    }
+    setPicked((p) => (p.includes(m.id) ? p.filter((x) => x !== m.id) : p.length >= MAX_PICK ? p : [...p, m.id]));
+  };
   const thumbs = useMemo(() => models.map((m) => renderPage('index', { brief, content, model: m, images, mode: 'preview', imageSize: 'thumb' })), [models, brief, content, images]);
   const updateModel = (m) => save({ result: { ...rec.result, models: models.map((x) => (x.id === m.id ? m : x)) } }, null, true);
+  const removeVersion = (m) => {
+    setPicked((p) => p.filter((x) => x !== m.id));
+    save({ result: { ...rec.result, models: models.filter((x) => x.id !== m.id) } }, null, true);
+  };
   const okCount = picked.length >= MIN_PICK && picked.length <= MAX_PICK;
 
   async function send() {
@@ -218,7 +235,7 @@ function SelectPanel({ rec, settings, brief, images, save, onRegenerate, imgStat
         <div>
           <h2>Choisissez les modèles à montrer</h2>
           <p className="muted">
-            Retenez {MIN_PICK} à {MAX_PICK} modèles parmi les {models.length}. Le client ne verra que ceux-là, jamais la génération.
+            Retenez {MIN_PICK} à {MAX_PICK} modèles parmi les {models.length}. Le client ne verra que ceux-là, jamais la génération. Dans <strong>Voir en grand</strong>, chaque style existe en 4 versions.
           </p>
         </div>
         <div className="row-actions">
@@ -259,6 +276,7 @@ function SelectPanel({ rec, settings, brief, images, save, onRegenerate, imgStat
             onOpen={() => setOpen(i)}
             onVary={() => updateModel(varyModel(m))}
             onPalette={() => updateModel(nextPalette(m))}
+            onRemove={m.variantOf ? () => removeVersion(m) : null}
           />
         ))}
       </div>
@@ -297,9 +315,10 @@ function SelectPanel({ rec, settings, brief, images, save, onRegenerate, imgStat
           content={content}
           images={images}
           onClose={() => setOpen(null)}
+          withVersions
           renderAction={(m) => (
             <button type="button" className={`btn small ${picked.includes(m.id) ? 'primary' : 'secondary'}`} aria-pressed={picked.includes(m.id)} onClick={() => toggle(m)} disabled={!picked.includes(m.id) && full}>
-              {picked.includes(m.id) ? 'Retenu' : 'Retenir ce modèle'}
+              {picked.includes(m.id) ? 'Retenue' : 'Retenir cette version'}
             </button>
           )}
         />

@@ -28,6 +28,9 @@ export function questionnaireView(rec) {
 export function proposalsView(rec) {
   if (!PROPOSED.includes(rec.status) || !rec.result) return { id: rec.id, ready: false, name: rec.brief?.businessName || rec.name };
   const byId = Object.fromEntries((rec.result.models || []).map((m) => [m.id, m]));
+  const picked = (rec.picked || []).map((id) => byId[id]).filter(Boolean);
+  // Modèles de départ des versions envoyées : le client parcourt les 4 versions de chaque style
+  const bases = [...new Set(picked.filter((m) => m.variantOf && !rec.picked.includes(m.variantOf)).map((m) => m.variantOf))].map((id) => byId[id]).filter(Boolean);
   return {
     id: rec.id,
     ready: true,
@@ -36,7 +39,9 @@ export function proposalsView(rec) {
     message: rec.message,
     brief: rec.brief,
     content: rec.result.content,
-    models: (rec.picked || []).map((id) => byId[id]).filter(Boolean),
+    models: picked,
+    bases,
+    chosenModel: rec.choice ? byId[rec.choice.modelId] || null : null,
     aiImages: rec.aiImages || [],
     stockImages: rec.stockImages || [],
     choice: rec.choice,
