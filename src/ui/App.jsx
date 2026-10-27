@@ -246,7 +246,42 @@ function ImageStatus({ status, agency, onRetry }) {
   );
 }
 
-function Gallery({ result, brief, images, agency, onChoose, onUpdateModel, onEdit, onRegenerate, warnings, imgStatus, onRetryImages }) {
+// Enregistrement dans Google Drive : visible seulement en mode agence
+function DriveStatus({ status, onRetry }) {
+  if (!status || status.state === 'idle') return null;
+  if (status.state === 'running') {
+    return (
+      <div className="img-status drive-status" role="status">
+        <span className="gen-dot" aria-hidden="true" />
+        Drive : enregistrement en cours…
+      </div>
+    );
+  }
+  if (status.state === 'failed') {
+    return (
+      <div className="alert soft drive-status" role="status">
+        Drive : l’enregistrement a échoué. {status.message || ''}{' '}
+        {onRetry && (
+          <button type="button" className="btn-text small" onClick={onRetry}>
+            Réessayer
+          </button>
+        )}
+      </div>
+    );
+  }
+  return (
+    <div className="img-status done drive-status" role="status">
+      Drive : {status.zip ? 'brief, photos et site enregistrés' : 'brief et photos enregistrés'}.{' '}
+      {status.dossier && (
+        <a href={status.dossier} target="_blank" rel="noopener noreferrer">
+          Ouvrir le dossier
+        </a>
+      )}
+    </div>
+  );
+}
+
+function Gallery({ result, brief, images, agency, onChoose, onUpdateModel, onEdit, onRegenerate, warnings, imgStatus, onRetryImages, driveStatus, onRetryDrive }) {
   const [open, setOpen] = useState(null);
   const { models, content } = result;
   return (
@@ -273,6 +308,7 @@ function Gallery({ result, brief, images, agency, onChoose, onUpdateModel, onEdi
         </div>
       ))}
       <ImageStatus status={imgStatus} agency={agency} onRetry={onRetryImages} />
+      {agency && <DriveStatus status={driveStatus} onRetry={onRetryDrive} />}
       <div className="model-grid">
         {models.map((m, i) => (
           <ModelCard
@@ -310,7 +346,7 @@ function Gallery({ result, brief, images, agency, onChoose, onUpdateModel, onEdi
 }
 
 // ---------- Site final ----------
-function FinalView({ result, model, brief, images, agency, onBack, onEdit, onUpdateModel, saveFile, imgStatus, onRetryImages }) {
+function FinalView({ result, model, brief, images, agency, onBack, onEdit, onUpdateModel, saveFile, imgStatus, onRetryImages, onZip, driveStatus, onRetryDrive }) {
   const { content } = result;
   const [page, setPage] = useState('index');
   const [device, setDevice] = useState('desktop');
@@ -327,6 +363,7 @@ function FinalView({ result, model, brief, images, agency, onBack, onEdit, onUpd
       const blob = await buildZip({ brief, content, model, images });
       const r = await saveFile(blob, zipName(brief));
       if (r !== false) setNote('Le fichier .zip est prêt dans vos téléchargements.');
+      onZip?.(blob);
     } catch (e) {
       setNote(e?.message || 'Le téléchargement n’a pas abouti. Réessayez.');
     } finally {
@@ -372,6 +409,7 @@ function FinalView({ result, model, brief, images, agency, onBack, onEdit, onUpd
         </div>
         <aside className="final-side">
           <ImageStatus status={imgStatus} agency={agency} onRetry={onRetryImages} />
+          {agency && <DriveStatus status={driveStatus} onRetry={onRetryDrive} />}
           <button type="button" className="btn primary block" onClick={download} disabled={busy || imgStatus?.state === 'running'}>
             {busy ? 'Préparation du fichier…' : agency ? 'Télécharger le site (.zip)' : 'Télécharger mon site'}
           </button>
@@ -430,7 +468,7 @@ function FinalView({ result, model, brief, images, agency, onBack, onEdit, onUpd
 }
 
 // ---------- Application ----------
-export default function App({ mode = 'client', runner = null, imagesFn = null, imageGen = null, saveFile, banner = null, modeSwitch = null, appName = 'Studio Site' }) {
+export default function App({ mode = 'client', runner = null, imagesFn = null, imageGen = null, drive = null, saveFile, banner = null, modeSwitch = null, appName = 'Studio Site' }) {
   const agency = mode === 'agence';
   const draftKey = `studio-site:brief:${mode}`;
   const [brief, setBrief] = useState(() => emptyBrief());
@@ -452,6 +490,13 @@ export default function App({ mode = 'client', runner = null, imagesFn = null, i
   const partialRef = useRef({});
   const abortRef = useRef(null);
   const loaded = useRef(false);
+  // Enregistrement dans Google Drive (brief, photos, .zip), les envois passent l'un après l'autre
+  const [driveStatus, setDriveStatus] = useState({ state: 'idle' });
+  const driveSession = useRef(null);
+  const driveBriefKey = useRef('');
+  const drivePhotos = useRef(new Set());
+  const driveZipKey = useRef('');
+  const driveTask = useRef(Promise.resolve());
 
   // Brouillon conservé dans le navigateur
   useEffect(() => {
@@ -475,7 +520,10 @@ export default function App({ mode = 'client', runner = null, imagesFn = null, i
     abortRef.current = ctl;
     setError(null);
     setFailure(null);
-    if (!resume) partialRef.current = {};
+    if (!resume) {
+      partialRef.current = {};
+      syncDrive();
+    }
     imgAbortRef.current?.abort();
     setAiImgs([]);
     setStockImgs([]);
@@ -544,6 +592,63 @@ export default function App({ mode = 'client', runner = null, imagesFn = null, i
     }
   }
 
+  // Brief et nouvelles photos vers le Drive (sans bloquer la génération)
+  function syncDrive() {
+    if (!drive) return driveTask.current;
+    const snapshot = { brief, photos: photos.filter((p) => p.source === 'client' && p.blob) };
+    driveTask.current = driveTask.current.catch(() => {}).then(() => pushDrive(snapshot));
+    return driveTask.current;
+  }
+
+  async function pushDrive({ brief: b, photos: list }) {
+    const key = JSON.stringify(b);
+    const pending = () => list.filter((p) => !drivePhotos.current.has(p.id));
+    if (key === driveBriefKey.current && driveSession.current && !pending().length) return;
+    setDriveStatus((s) => ({ ...s, state: 'running', message: '' }));
+    try {
+      if (key !== driveBriefKey.current || !driveSession.current) {
+        const r = await drive.brief(b, { mode, photos: list.length });
+        if (driveSession.current?.identifiant !== r.identifiant) {
+          drivePhotos.current = new Set();
+          driveZipKey.current = '';
+        }
+        driveSession.current = { identifiant: r.identifiant, jeton: r.jeton };
+        driveBriefKey.current = key;
+        setDriveStatus((s) => ({ ...s, dossier: r.dossier || s.dossier, zip: false }));
+      }
+      for (const p of pending()) {
+        const nom = String(p.file || '').split('/').pop() || `photo-${p.id}.jpg`;
+        await drive.fichier({ ...driveSession.current, dossier: 'photos', nom, blob: p.blob });
+        drivePhotos.current.add(p.id);
+      }
+      setDriveStatus((s) => ({ ...s, state: 'done', message: '' }));
+    } catch (e) {
+      console.warn('[drive]', e?.message);
+      setDriveStatus((s) => ({ ...s, state: 'failed', message: e?.message || '' }));
+    }
+  }
+
+  // .zip téléchargé : une copie dans « 3-Versions du site » (une seule par modèle et par brief)
+  function zipToDrive(blob, model) {
+    if (!drive) return;
+    syncDrive();
+    driveTask.current = driveTask.current
+      .catch(() => {})
+      .then(async () => {
+        const key = JSON.stringify([driveBriefKey.current, model.id, model.archetype, model.seed, model.paletteIndex, model.variants || null]);
+        if (!driveSession.current || key === driveZipKey.current) return;
+        setDriveStatus((s) => ({ ...s, state: 'running', message: '' }));
+        try {
+          await drive.fichier({ ...driveSession.current, dossier: 'versions', nom: 'auto', blob });
+          driveZipKey.current = key;
+          setDriveStatus((s) => ({ ...s, state: 'done', zip: true, message: '' }));
+        } catch (e) {
+          console.warn('[drive]', e?.message);
+          setDriveStatus((s) => ({ ...s, state: 'failed', message: e?.message || '' }));
+        }
+      });
+  }
+
   function cancel() {
     abortRef.current?.abort();
     setScreen(result ? 'gallery' : 'form');
@@ -554,7 +659,7 @@ export default function App({ mode = 'client', runner = null, imagesFn = null, i
   }
 
   const chosen = result?.models.find((m) => m.id === chosenId) || null;
-  const formExtra = { photos, setPhotos, aiAvailable: Boolean(imageGen) };
+  const formExtra = { photos, setPhotos, aiAvailable: Boolean(imageGen), driveEnabled: Boolean(drive) };
 
   return (
     <div className={`ss ss-${screen}`}>
@@ -602,6 +707,8 @@ export default function App({ mode = 'client', runner = null, imagesFn = null, i
             onRegenerate={() => run()}
             imgStatus={imgStatus}
             onRetryImages={imageGen && agency ? () => startImages(result.content) : imgStatus.state === 'failed' && imageGen ? () => startImages(result.content) : null}
+            driveStatus={driveStatus}
+            onRetryDrive={() => syncDrive()}
           />
         )}
         {screen === 'final' && result && chosen && (
@@ -621,6 +728,9 @@ export default function App({ mode = 'client', runner = null, imagesFn = null, i
             onUpdateModel={updateModel}
             imgStatus={imgStatus}
             onRetryImages={imageGen && (agency || imgStatus.state === 'failed') ? () => startImages(result.content) : null}
+            onZip={(blob) => zipToDrive(blob, chosen)}
+            driveStatus={driveStatus}
+            onRetryDrive={() => syncDrive()}
           />
         )}
       </main>

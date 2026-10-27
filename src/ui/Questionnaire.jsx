@@ -3,8 +3,11 @@ import { useState, useRef } from 'react';
 import { STEPS, validateStep, validateBrief, EXAMPLES, emptyBrief } from '../engine/questions.js';
 import { prepareImage, MAX_PHOTOS } from '../ai/images.js';
 
-// Envoi des photos du client : redimensionnées dans le navigateur, jamais envoyées au serveur
-function PhotoField({ f, photos, setPhotos }) {
+// Photos du client : redimensionnées dans le navigateur. Elles ne quittent l'appareil
+// que si l'enregistrement dans Google Drive est configuré (le texte d'aide l'indique).
+const HINT_DRIVE = 'Jusqu’à 10 photos : votre lieu, votre équipe au travail, vos réalisations, vos produits. Elles nous sont transmises avec vos réponses pour préparer votre site.';
+
+function PhotoField({ f, photos, setPhotos, driveEnabled = false }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [over, setOver] = useState(false);
@@ -56,7 +59,7 @@ function PhotoField({ f, photos, setPhotos }) {
   return (
     <fieldset className="q-field">
       <legend className="q-label">{f.label}</legend>
-      <p className="q-hint">{f.hint}</p>
+      <p className="q-hint">{driveEnabled ? HINT_DRIVE : f.hint}</p>
       <label
         className={`dropzone${over ? ' over' : ''}${left <= 0 ? ' full' : ''}`}
         onDragOver={(e) => {
@@ -122,7 +125,7 @@ function ToggleField({ f, brief, set, aiAvailable }) {
 
 function Field({ f, brief, set, error, extra = {} }) {
   if (f.showIf && !f.showIf(brief)) return null;
-  if (f.type === 'photos') return <PhotoField f={f} photos={extra.photos || []} setPhotos={extra.setPhotos || (() => {})} />;
+  if (f.type === 'photos') return <PhotoField f={f} photos={extra.photos || []} setPhotos={extra.setPhotos || (() => {})} driveEnabled={!!extra.driveEnabled} />;
   if (f.type === 'toggle') return <ToggleField f={f} brief={brief} set={set} aiAvailable={!!extra.aiAvailable} />;
   const v = brief[f.id];
   const id = `q-${f.id}`;
@@ -317,6 +320,11 @@ export function ClientStepper({ brief, setBrief, onSubmit, error, initialStep = 
             <Field key={f.id} f={f} brief={brief} set={set} error={errors[f.id]} extra={extra} />
           ))}
         </div>
+        {last && extra?.driveEnabled && (
+          <p className="q-consent">
+            En cliquant sur « Créer mes 10 propositions », vous acceptez que vos réponses et vos photos nous soient transmises. Elles servent uniquement à préparer votre site.
+          </p>
+        )}
         <div className="step-nav">
           {step > 0 ? (
             <button type="button" className="btn secondary" onClick={() => go(step - 1)}>
@@ -390,7 +398,7 @@ export function AgencyForm({ brief, setBrief, onSubmit, error, extra }) {
         </section>
       ))}
       <div className="sticky-bar">
-        <p>{Object.keys(errors).filter((k) => errors[k]).length ? 'Certains champs obligatoires sont vides.' : 'Les 10 modèles sont générés en une fois.'}</p>
+        <p>{Object.keys(errors).filter((k) => errors[k]).length ? 'Certains champs obligatoires sont vides.' : extra?.driveEnabled ? 'Les 10 modèles sont générés en une fois. Le brief et les photos sont enregistrés dans le Drive.' : 'Les 10 modèles sont générés en une fois.'}</p>
         <button type="submit" className="btn primary">
           Générer les 10 modèles
         </button>

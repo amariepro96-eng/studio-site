@@ -144,6 +144,8 @@ html, body { margin: 0; background: #f3f4f6; }
 .q-toggle.disabled { cursor: default; background: var(--bg); }
 .img-status { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 12px 16px; border-radius: 10px; background: var(--accent-soft); color: var(--ink); font-size: 0.94rem; margin-bottom: 20px; }
 .img-status.done { background: #e7f5ee; }
+.drive-status a { color: inherit; font-weight: 600; }
+.q-consent { font-size: 0.86rem; color: var(--muted); margin: 18px 0 0; max-width: 60ch; }
 .final-side .img-status, .final-side .alert { margin-bottom: 0; }
 
 /* Brief agence */
