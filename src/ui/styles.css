@@ -2276,3 +2276,222 @@ body {
     display: none;
   }
 }
+
+/* ---------- Mise en ligne automatique (dossier client et Réglages) ---------- */
+.pub {
+  display: grid;
+  gap: 10px;
+  padding-bottom: 16px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.92rem;
+  color: var(--muted);
+}
+.pub h3 {
+  font-size: 1rem;
+  color: var(--ink);
+  margin: 0;
+}
+.pub p {
+  margin: 0;
+}
+.pub .q-field {
+  margin: 0;
+}
+.pub-id input {
+  width: 100%;
+}
+.pub-live {
+  color: var(--ink);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.pub-links {
+  overflow-wrap: anywhere;
+}
+.pub-checks,
+.pub-keys {
+  list-style: none;
+  padding: 0 !important;
+  margin: 0;
+  display: grid;
+  gap: 6px;
+}
+.pub-checks li,
+.pub-keys li {
+  display: grid;
+  grid-template-columns: 1em minmax(0, 1fr);
+  gap: 8px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.pub-checks li::before,
+.pub-keys li::before {
+  content: '✓';
+  flex: none;
+  width: 1em;
+  font-weight: 700;
+  color: var(--ok);
+}
+.pub-checks li.is-ko::before,
+.pub-keys li.is-ko::before {
+  content: '!';
+  color: var(--danger);
+}
+.pub-checks li.is-ko,
+.pub-keys li.is-ko {
+  color: var(--danger);
+}
+.pub-steps {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+.pub-steps li {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 8px;
+  color: var(--muted);
+}
+.pub-steps .ic {
+  width: 16px;
+  height: 16px;
+  margin-top: 3px;
+  border-radius: 50%;
+  border: 2px solid var(--line-strong);
+}
+.pub-steps li.run {
+  color: var(--ink);
+}
+.pub-steps li.run .ic {
+  border-color: var(--accent);
+  border-top-color: transparent;
+  animation: pub-spin 0.8s linear infinite;
+}
+.pub-steps li.done {
+  color: var(--ink);
+}
+.pub-steps li.done .ic {
+  background: var(--ok);
+  border-color: var(--ok);
+}
+.pub-steps li.err {
+  color: var(--danger);
+}
+.pub-steps li.err .ic {
+  background: var(--danger);
+  border-color: var(--danger);
+}
+.pub-steps small {
+  display: block;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+@keyframes pub-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pub-steps li.run .ic {
+    animation: none;
+  }
+}
+.pub-domain {
+  display: grid;
+  gap: 8px;
+  margin-top: 6px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--line);
+}
+.pub-domain h4 {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--ink);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  overflow-wrap: anywhere;
+}
+.ss .pub-domain .linkline input {
+  min-width: 0;
+  flex: 1 1 100%;
+}
+.tag {
+  font-size: 0.75rem;
+  font-weight: 650;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--sunken);
+  color: var(--muted);
+}
+.tag.ok {
+  background: var(--accent-soft);
+  color: var(--ok);
+}
+.tag.wait {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.dns {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+.dns li {
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--sheet);
+}
+.dns-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  align-items: baseline;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.dns-head strong {
+  color: var(--ink);
+}
+.dns-head span:last-child {
+  margin-left: auto;
+}
+.dns-val {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  align-items: center;
+}
+.dns-val code {
+  overflow-wrap: anywhere;
+  font-size: 0.82rem;
+  color: var(--ink);
+}
+.dns-ok {
+  color: var(--ok) !important;
+  font-weight: 650;
+}
+.dns-wait {
+  color: var(--warn) !important;
+}
+.ss .btn.danger-solid {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+.pub-settings {
+  margin-top: 6px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 8px;
+}

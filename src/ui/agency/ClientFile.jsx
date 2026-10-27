@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, uploadImage, copyText, saveBlob } from '../api.js';
 import { AgencyBar, StageStrip, Spinner } from '../Chrome.jsx';
 import { AgencyForm } from '../Questionnaire.jsx';
+import Publication from './Publication.jsx';
 import { remoteExtra } from '../RemoteMedia.jsx';
 import { ThumbFrame, DeviceFrame, DeviceToggle, PageTabs } from '../Frames.jsx';
 import { Generating, PreviewModal, ImageStatus, archName, varyModel, nextPalette } from '../App.jsx';
@@ -328,7 +329,7 @@ function SelectPanel({ rec, settings, brief, images, save, onRegenerate, imgStat
 }
 
 // ---------- Mise en service ----------
-function Workspace({ rec, settings, brief, images, save, onReselect }) {
+function Workspace({ rec, settings, brief, images, save, onReselect, onRecord, onEditBrief }) {
   const content = rec.result.content;
   const model = rec.result.models.find((m) => m.id === rec.choice?.modelId);
   const [page, setPage] = useState('index');
@@ -336,6 +337,8 @@ function Workspace({ rec, settings, brief, images, save, onReselect }) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
   const [liveUrl, setLiveUrl] = useState(rec.liveUrl || '');
+  // L'adresse peut être remplie par la mise en ligne automatique (domaine validé)
+  useEffect(() => setLiveUrl(rec.liveUrl || ''), [rec.liveUrl]);
   const pages = useMemo(() => sitePages(brief, content), [brief, content]);
   const html = useMemo(() => (model ? renderPage(page, { brief, content, model, images, mode: 'preview' }) : ''), [page, brief, content, model, images]);
   const nav = useCallback((p) => setPage(p), []);
@@ -391,7 +394,8 @@ function Workspace({ rec, settings, brief, images, save, onReselect }) {
           </div>
         </div>
         <aside className="workspace-side">
-          <button type="button" className="btn primary block" onClick={download} disabled={busy}>
+          <Publication rec={rec} onRecord={onRecord} onEditBrief={onEditBrief} />
+          <button type="button" className="btn secondary block" onClick={download} disabled={busy}>
             {busy ? 'Préparation du fichier…' : 'Télécharger le site (.zip)'}
           </button>
           {note && (
@@ -844,7 +848,7 @@ export default function ClientFile({ id, studioName }) {
       </section>
     );
   } else {
-    panel = <Workspace rec={rec} settings={settings} brief={brief} images={images} save={save} onReselect={() => setView('select')} />;
+    panel = <Workspace rec={rec} settings={settings} brief={brief} images={images} save={save} onReselect={() => setView('select')} onRecord={(client) => pendingRef.current === 0 && setRec(client)} onEditBrief={() => openEdit(rec)} />;
   }
 
   return (

@@ -51,6 +51,16 @@ Sans stockage, l'espace agence affiche la marche à suivre ; seul l'Atelier libr
 | `GENERATIONS_PER_HOUR` | Générations autorisées par visiteur et par heure (défaut : 20) | Non |
 | `NEXT_PUBLIC_APP_NAME` | Nom affiché de l'outil (modifiable aussi dans Réglages) | Non |
 | `BLOB_STORE_ID`, `BLOB_READ_WRITE_TOKEN` | Ajoutées par Vercel quand le stockage Blob est relié au projet | Oui, pour les dossiers clients |
+| `GITHUB_PUBLISH_TOKEN` | Clé GitHub à grain fin, propriétaire : l'organisation des sites clients (Administration et Contents en écriture) | Pour la mise en ligne automatique |
+| `GITHUB_PUBLISH_ORG` | Organisation GitHub des sites clients (défaut : `Station-Site`) | Non |
+| `VERCEL_PUBLISH_TOKEN` | Clé Vercel limitée à l'équipe Pro | Pour la mise en ligne automatique |
+| `VERCEL_TEAM_ID` | Identifiant de l'équipe Vercel, seulement si la clé en voit plusieurs | Non |
+
+### Mise en ligne automatique
+
+Dans le dossier d'un client, une fois son modèle choisi, le bouton **Mettre en ligne** crée le dépôt privé `site-identifiant` dans l'organisation GitHub, crée le projet Vercel relié, dépose le site (sans `LISEZ-MOI.txt`) et suit Vercel jusqu'à « Ready ». Le bouton **Ajouter dans Vercel** relie ensuite le domaine du client (avec et sans www) et affiche les valeurs DNS à saisir chez OVHcloud.
+
+Garde-fous : coupée tant qu'elle n'est pas activée dans **Réglages** ; publication bloquée s'il reste des crochets dans les mentions légales ; jamais d'écriture dans un dépôt qui n'a pas été créé pour ce dossier ; confirmation demandée si le dépôt a été modifié à la main sur GitHub depuis la dernière publication. Chaque étape est notée dans l'historique du dossier.
 
 Chaque génération complète fait 3 appels à l'API Claude, plus 0 à 8 images Gemini selon le nombre de photos fournies. Les coûts dépendent des modèles choisis : consultez les grilles tarifaires (platform.claude.com, ai.google.dev/pricing) et fixez une limite de dépenses dans chaque console.
 

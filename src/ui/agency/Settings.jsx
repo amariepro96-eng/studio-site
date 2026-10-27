@@ -18,9 +18,13 @@ export default function Settings({ studioName }) {
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [storage, setStorage] = useState(null);
+  const [pub, setPub] = useState(null);
   useEffect(() => {
     api('/api/agence/settings')
-      .then((d) => setS(d.settings))
+      .then((d) => {
+        setS(d.settings);
+        setPub(d.publication || null);
+      })
       .catch((e) => setError(e.message));
     api('/api/agence/clients')
       .then((d) => setStorage(d.storage))
@@ -34,6 +38,7 @@ export default function Settings({ studioName }) {
     try {
       const d = await api('/api/agence/settings', { method: 'PUT', body: { settings: s } });
       setS(d.settings);
+      setPub(d.publication || null);
       setNote('Réglages enregistrés.');
     } catch (err) {
       setError(err.message);
@@ -73,6 +78,7 @@ export default function Settings({ studioName }) {
                 )}
               </div>
             ))}
+            {pub && <PublishSettings pub={pub} value={!!s.autoPublish} onChange={(v) => setS({ ...s, autoPublish: v })} />}
             <div className="form-actions">
               <button type="submit" className="btn primary" disabled={busy}>
                 {busy ? 'Enregistrement…' : 'Enregistrer'}
@@ -86,6 +92,39 @@ export default function Settings({ studioName }) {
           </form>
         )}
       </main>
+    </div>
+  );
+}
+
+// Mise en ligne automatique : état des deux clés et interrupteur général
+function PublishSettings({ pub, value, onChange }) {
+  const key = (name) => !pub.missing.includes(name);
+  return (
+    <div className="q-field pub-settings">
+      <span className="q-label">Mise en ligne automatique</span>
+      <p className="q-hint">
+        Depuis le dossier d’un client, un clic crée le dépôt privé dans l’organisation GitHub <strong>{pub.org}</strong>, crée le projet Vercel et met le site en ligne. Rien ne part sans ton clic.
+      </p>
+      <ul className="pub-keys">
+        <li className={key('GITHUB_PUBLISH_TOKEN') ? 'is-ok' : 'is-ko'}>
+          <span>
+            Clé GitHub <code>GITHUB_PUBLISH_TOKEN</code> : {key('GITHUB_PUBLISH_TOKEN') ? 'présente' : 'manquante'}
+          </span>
+        </li>
+        <li className={key('VERCEL_PUBLISH_TOKEN') ? 'is-ok' : 'is-ko'}>
+          <span>
+            Clé Vercel <code>VERCEL_PUBLISH_TOKEN</code> : {key('VERCEL_PUBLISH_TOKEN') ? 'présente' : 'manquante'}
+          </span>
+        </li>
+      </ul>
+      {!pub.configured && <p className="q-hint">Ajoute les clés manquantes dans Vercel › Settings › Environment Variables, puis redéploie sans le cache (document 13, §J).</p>}
+      <label className="q-toggle compact">
+        <input type="checkbox" checked={value} onChange={(e) => onChange(e.target.checked)} />
+        <span>
+          <span className="q-option-title">Autoriser la mise en ligne automatique</span>
+          <span className="q-option-hint">Décoche puis enregistre pour tout couper d’un coup : plus aucun dossier ne peut publier.</span>
+        </span>
+      </label>
     </div>
   );
 }

@@ -232,6 +232,8 @@ export const DEFAULT_SETTINGS = {
   email: '',
   phone: '',
   hosting: DEFAULT_HOSTING,
+  // Mise en ligne automatique (GitHub + Vercel) : coupée tant que tu ne l'actives pas
+  autoPublish: false,
 };
 
 export async function getSettings() {
@@ -242,7 +244,8 @@ export async function getSettings() {
 
 export async function saveSettings(input) {
   const s = { ...(await getSettings()) };
-  for (const k of Object.keys(DEFAULT_SETTINGS)) if (typeof input?.[k] === 'string') s[k] = input[k].slice(0, 300).trim();
+  for (const k of Object.keys(DEFAULT_SETTINGS)) if (typeof DEFAULT_SETTINGS[k] === 'string' && typeof input?.[k] === 'string') s[k] = input[k].slice(0, 300).trim();
+  if (typeof input?.autoPublish === 'boolean') s.autoPublish = input.autoPublish;
   if (!s.studioName) s.studioName = DEFAULT_SETTINGS.studioName;
   if (!s.ownerName) s.ownerName = DEFAULT_SETTINGS.ownerName;
   await writeRaw('settings.json', JSON.stringify(s), { contentType: 'application/json' });
