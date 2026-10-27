@@ -185,9 +185,28 @@ function updateJson(pathname, fn) {
   return withLocalLock(pathname, () => updateJsonOnce(pathname, fn));
 }
 
+// Lecture avant modification. L'ETag vient des métadonnées de l'API Blob (head), comme le
+// prévoit la documentation des écritures conditionnelles : celui renvoyé avec le contenu passe
+// par le CDN, qui le transforme (« W/… ») quand il compresse un fichier, et ne serait jamais reconnu.
+async function readForUpdate(pathname) {
+  if (storageMode() === 'local') return readJson(pathname);
+  const { head } = await blob();
+  let meta;
+  try {
+    meta = await head(pathname);
+  } catch (e) {
+    if (e instanceof blobLib.BlobNotFoundError) return null;
+    throw e;
+  }
+  // Contenu lu après l'ETag : si quelqu'un écrit entre les deux, l'écriture conditionnelle échoue et on recommence
+  const cur = await readJson(pathname);
+  if (!cur) return null;
+  return { data: cur.data, etag: meta?.etag || '' };
+}
+
 async function updateJsonOnce(pathname, fn) {
   for (let attempt = 0; attempt < 6; attempt++) {
-    const cur = await readJson(pathname);
+    const cur = await readForUpdate(pathname);
     if (!cur) return null;
     // Sans ETag, impossible d'écrire sans risquer d'effacer une autre modification
     if (!cur.etag) throw new StoreError('Le dossier n’a pas pu être verrouillé pour l’enregistrement. Réessayez.', 'conflict', 409);

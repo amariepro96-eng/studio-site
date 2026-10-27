@@ -21,16 +21,16 @@ export function StorageSetup() {
       <p>Les dossiers clients, les réponses et les photos sont enregistrés dans Vercel Blob. Il faut le créer une seule fois :</p>
       <ol>
         <li>
-          Sur <a href="https://vercel.com" target="_blank" rel="noopener noreferrer">vercel.com</a>, ouvrez le projet de Studio Site, onglet <strong>Storage</strong>.
+          Sur <a href="https://vercel.com" target="_blank" rel="noopener noreferrer">vercel.com</a>, ouvrez le projet de Studio Site, puis <strong>Storage</strong> dans le menu de gauche.
         </li>
         <li>
-          <strong>Create</strong> › <strong>Blob</strong> › <strong>Continue</strong>. Choisissez l’accès <strong>Private</strong> et la région <strong>Paris (cdg1)</strong>, puis créez.
+          <strong>Create Storage</strong> › <strong>Blob</strong> › <strong>Continue</strong>. Accès <strong>Private</strong>, région Paris si elle est proposée, puis <strong>Create a new Blob store</strong>. Laissez cochés Production et Preview, sans toucher aux options avancées.
         </li>
         <li>
-          Vérifiez qu’il est relié au projet (onglet <strong>Projects</strong> du stockage), pour tous les environnements.
+          Vérifiez dans <strong>Settings</strong> › <strong>Environment Variables</strong> que <code>BLOB_READ_WRITE_TOKEN</code> apparaît pour Production.
         </li>
         <li>
-          <strong>Deployments</strong> › <strong>⋯</strong> sur la première ligne › <strong>Redeploy</strong>. Rechargez cette page quand c’est <strong>Ready</strong>.
+          <strong>Deployments</strong> › <strong>⋯</strong> sur la première ligne › <strong>Redeploy</strong>. Quand c’est <strong>Ready</strong>, rechargez cette page (Ctrl + F5).
         </li>
       </ol>
       <p className="muted">En attendant, l’Atelier libre fonctionne comme avant, sans rien enregistrer.</p>
