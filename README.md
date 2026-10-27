@@ -13,10 +13,20 @@ Agent IA qui crée un site internet à partir d'un questionnaire et propose **10
    - textes principaux (atouts, services, histoire, appel à l'action, référencement) ;
    - pages secondaires (FAQ, contact, produits pour une boutique).
 3. Le **moteur de rendu** assemble chaque modèle selon la composition propre à son style (2 recettes par style : galeries, bandeaux photo, étapes, manifeste, bento…) à partir de blocs validés : polices, palettes, mises en page et visuels propres à chaque direction. Le rendu reste professionnel quel que soit le texte.
-4. **Images** : les photos envoyées par le client (redimensionnées dans son navigateur, jamais envoyées au serveur) passent en premier. Gemini complète jusqu'à 10 visuels en créant jusqu'à 8 images d'ambiance réalistes à partir de descriptions rédigées par Claude. Sans clé Gemini, des photos Unsplash (si configuré) ou des illustrations graphiques prennent le relais.
+4. **Images** : les photos envoyées par le client (redimensionnées dans son navigateur ; transmises au Drive seulement si l'enregistrement automatique est configuré) passent en premier. Gemini complète jusqu'à 10 visuels en créant jusqu'à 8 images d'ambiance réalistes à partir de descriptions rédigées par Claude. Sans clé Gemini, des photos Unsplash (si configuré) ou des illustrations graphiques prennent le relais.
 5. Le client choisit un modèle : le site complet (accueil, services, boutique, à propos, FAQ, contact, mentions légales) se prévisualise sur ordinateur, tablette et mobile, puis se télécharge en .zip prêt à héberger.
 
 Sans clé API, l'application fonctionne en **mode démo** avec des textes génériques.
+
+## Enregistrement automatique dans Google Drive
+
+Avec `DRIVE_WEBHOOK_URL` et `DRIVE_WEBHOOK_SECRET`, chaque questionnaire terminé est enregistré par le script du tableau « Suivi clients » :
+
+- dès le clic sur « Créer mes 10 propositions » (ou « Générer les 10 modèles ») : une ligne dans le tableau, le dossier du client et une fiche brief (Google Docs) dans `1-Brief et infos` ;
+- les photos du client dans `2-Photos et logo` ;
+- à chaque téléchargement du site, une copie du .zip dans `3-Versions du site` (`identifiant-vN-date.zip`).
+
+Les envois passent par la route serveur `/api/drive` : l'adresse et la clé du script ne sont jamais envoyées au navigateur. Les fichiers partent en morceaux de 2,25 Mo pour rester sous la limite de 4,5 Mo par requête de Vercel. En mode client, une phrase informe le visiteur que ses réponses et ses photos sont transmises ; sans ces variables, rien ne quitte le navigateur à part le brief envoyé à l'IA.
 
 ## Mettre en ligne (Vercel)
 
@@ -39,6 +49,8 @@ Sans clé API, l'application fonctionne en **mode démo** avec des textes géné
 | `UNSPLASH_ACCESS_KEY` | Photos libres de droits, utilisées si Gemini n'est pas configuré | Non |
 | `GENERATIONS_PER_HOUR` | Générations autorisées par visiteur et par heure (défaut : 20) | Non |
 | `NEXT_PUBLIC_APP_NAME` | Nom affiché de l'outil | Non |
+| `DRIVE_WEBHOOK_URL` | Adresse `/exec` du script « Automatisation dossiers clients » déployé en application Web | Non |
+| `DRIVE_WEBHOOK_SECRET` | Clé secrète affichée par le menu **Clients › Connecter Studio Site** du tableau | Non |
 
 Chaque génération complète fait 3 appels à l'API Claude, plus 0 à 8 images Gemini selon le nombre de photos fournies. Les coûts dépendent des modèles choisis : consultez les grilles tarifaires (platform.claude.com, ai.google.dev/pricing) et fixez une limite de dépenses dans chaque console.
 
@@ -62,6 +74,7 @@ app/                      Pages Next.js et routes API
   api/generate            Appel à l'API Claude (la clé reste côté serveur)
   api/images              Recherche de photos Unsplash (facultatif)
   api/images/generate     Création d'une image avec Gemini (la clé reste côté serveur)
+  api/drive               Enregistrement dans Google Drive (brief, photos, .zip)
   api/status, api/agence-login
 src/engine/               Le cœur, sans dépendance au framework
   questions.js            Questionnaire, secteurs, exemples
@@ -73,8 +86,10 @@ src/engine/               Le cœur, sans dépendance au framework
   content.js              Textes de démo, nettoyage des réponses de l'IA, classement
   prompts.js              Consignes envoyées à l'IA
   zip.js                  Export .zip
+  fiche.js                Fiche brief lisible pour le Drive
 src/ai/generate.js        Orchestration des 3 appels
 src/ai/images.js          Photos du client (redimensionnement) et images Gemini
+src/ai/drive.js           Envoi vers le Drive (brief, photos, .zip en morceaux)
 src/ui/                   Interface (questionnaire, galerie, aperçu)
 src/artifact/entry.jsx    Version démo publiée sur claude.ai
 ```
