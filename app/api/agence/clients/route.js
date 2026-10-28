@@ -20,6 +20,13 @@ function summary(r) {
     picked: (r.picked || []).length,
     chosen: Boolean(r.choice),
     liveUrl: r.liveUrl || '',
+    // Espace client : ce qui attend l'agence (demandes, changements pas encore en ligne)
+    espace: r.espace?.creeLe
+      ? {
+          demandes: (r.espace.demandes || []).filter((d) => ['envoyee', 'acceptee'].includes(d.statut)).length,
+          attente: Boolean(r.espace.aPublier),
+        }
+      : null,
   };
 }
 

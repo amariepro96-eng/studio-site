@@ -1,24 +1,16 @@
 // Mise en ligne automatique d'un dossier (espace agence uniquement).
 // Une étape par appel : l'écran du dossier les enchaîne après ton clic sur « Mettre en ligne ».
-import { route, ok, fail, readBody } from '../../../../../../src/server/http.js';
+import { after } from 'next/server';
+import { route, ok, fail, readBody, memeOrigine } from '../../../../../../src/server/http.js';
 import { getClient, updateClient } from '../../../../../../src/server/store.js';
 import { rateLimited, clientIp } from '../../../../../../src/server/config.js';
 import { verifier, etapeDepot, etapeVercel, etapeFichiers, etapeEtat, etapeDomaine, etapeVerifierDomaine, vuePublication } from '../../../../../../src/server/publish.js';
+import { driveStatus, envoyerVersDrive } from '../../../../../../src/server/drive.js';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60;
-
-// Refuse les appels venus d'un autre site (le cookie agence ne doit servir qu'ici)
-function memeOrigine(req) {
-  const origin = req.headers.get('origin');
-  if (!origin) return true;
-  try {
-    return new URL(origin).host === (req.headers.get('x-forwarded-host') || req.headers.get('host'));
-  } catch {
-    return false;
-  }
-}
+// Chaque étape tient en une minute ; l'archivage dans Drive qui suit une nouvelle version peut durer plus
+export const maxDuration = 300;
 
 // Enregistre l'avancement dans le dossier, avec une ligne d'historique
 async function enregistrer(id, patch, { log, extra } = {}) {
@@ -64,8 +56,12 @@ export const POST = route(
           // Les mentions légales ont été contrôlées : plus aucun crochet
           extra: (r) => {
             r.checks = { ...(r.checks || {}), legal: true };
+            // Les changements de l'espace client en attente partent avec cette version
+            if (r.espace?.aPublier) r.espace = { ...r.espace, aPublier: null };
           },
         });
+        // Copie de la version dans « 3-Versions du site » (Google Drive), sans faire attendre l'écran
+        if (driveStatus().configured) after(() => envoyerVersDrive(id, { site: true }).catch((e) => console.warn('[drive]', e?.message)));
         return ok({ client, publication: vuePublication(client.publication) });
       }
 

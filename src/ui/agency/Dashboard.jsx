@@ -9,7 +9,7 @@ export const FORMULAS = ['Essentiel', 'Pro', 'Boutique', 'Zéro apport'];
 
 const FILTERS = [
   { id: 'all', label: 'Tous', test: () => true },
-  { id: 'agence', label: 'À traiter', test: (c) => stageOf(c.status).waiting === 'agence' },
+  { id: 'agence', label: 'À traiter', test: (c) => stageOf(c.status).waiting === 'agence' || Boolean(c.espace?.demandes || c.espace?.attente) },
   { id: 'client', label: 'Chez le client', test: (c) => stageOf(c.status).waiting === 'client' },
   { id: 'live', label: 'En ligne', test: (c) => c.status === 'live' },
 ];
@@ -141,7 +141,9 @@ function ClientRow({ c }) {
           <MiniStages status={c.status} />
           <span className="client-stage-label">{stage.label}</span>
         </span>
-        <span className={`client-next turn-${turn}`}>{nextAction(c)}</span>
+        <span className={`client-next turn-${c.espace?.demandes || c.espace?.attente ? 'agence' : turn}`}>
+          {c.espace?.attente ? 'Changements de l’espace client à publier' : c.espace?.demandes ? `${c.espace.demandes} demande${c.espace.demandes > 1 ? 's' : ''} de l’espace client` : nextAction(c)}
+        </span>
         <span className="client-time muted">{timeAgo(c.updatedAt)}</span>
       </a>
     </li>

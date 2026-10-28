@@ -1,10 +1,14 @@
+import { after } from 'next/server';
 import { route, ok, fail, readBody, sanitizeBrief } from '../../../../src/server/http.js';
 import { getClient, updateClient } from '../../../../src/server/store.js';
 import { questionnaireView, studioInfo, EDITABLE } from '../../../../src/server/public.js';
 import { rateLimited, clientIp } from '../../../../src/server/config.js';
+import { driveStatus, envoyerVersDrive } from '../../../../src/server/drive.js';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+// Questionnaire envoyé : le brief et les photos partent ensuite vers Google Drive (sans faire attendre le client)
+export const maxDuration = 300;
 
 export const GET = route(async (req, { id }) => {
   const rec = await getClient(id);
@@ -47,5 +51,6 @@ export const PATCH = route(async (req, { id }) => {
   if (!rec) return fail(404, 'Ce lien n’est plus valable.', 'not_found');
   if (stale) return fail(409, 'Vos réponses ont été modifiées entre-temps, depuis un autre appareil ou par votre interlocuteur. Rechargez la page pour reprendre la dernière version.', 'stale');
   if (refused) return fail(409, 'Vos réponses ont déjà été prises en compte pour préparer vos propositions. Pour un changement, contactez votre interlocuteur.', 'locked');
+  if (body?.submit && driveStatus().configured) after(() => envoyerVersDrive(id, { parClient: true }).catch((e) => console.warn('[drive]', e?.message)));
   return ok({ client: questionnaireView(rec) });
 });

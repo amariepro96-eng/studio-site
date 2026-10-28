@@ -17,6 +17,9 @@ export function config() {
     geminiImageModel: process.env.GEMINI_IMAGE_MODEL || 'gemini-nano-banana-2.1',
     imagesPerHour: Math.max(1, parseInt(process.env.IMAGES_PER_HOUR || '80', 10) || 80),
     agencyPassword: process.env.AGENCY_PASSWORD || '',
+    // Enregistrement automatique dans Google Drive (script du tableau Suivi clients, document 11)
+    driveUrl: (process.env.DRIVE_WEBHOOK_URL || '').trim(),
+    driveSecret: (process.env.DRIVE_WEBHOOK_SECRET || '').trim(),
     // Nombre de générations complètes autorisées par visiteur et par heure
     generationsPerHour: Math.max(1, parseInt(process.env.GENERATIONS_PER_HOUR || '20', 10) || 20),
   };

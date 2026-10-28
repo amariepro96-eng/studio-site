@@ -2,11 +2,12 @@
 import { ARCHETYPES, ARCHETYPE_MAP } from './archetypes.js';
 import { COMPOSITIONS, DECO_SHAPES, DIVIDER_PATHS } from './compositions.js';
 import { flavorOf, applyFlavor, applyFlavorComp } from './flavors.js';
-import { BASE_CSS } from './css.js';
+import { BASE_CSS, ESPACE_CSS } from './css.js';
 import { art } from './art.js';
 import { icon } from './icons.js';
 import { esc, rng, pick, formatPrice, priceNumber, slugify, lines, hashString } from './util.js';
 import { mix, onColor, ensureContrast, isHex, luminance, alpha } from './color.js';
+import { aujourdhui, jourValide, decaler, jourTexte, fenetreAnnonce, dansFenetre, texteAnnonce, iconeDe, iconeSvg, feteParId, motifUrl } from './espace.js';
 
 const SERIF_FONTS = ['Fraunces', 'Cormorant Garamond', 'Young Serif', 'Lora', 'Alfa Slab One', 'Marcellus', 'Shippori Mincho', 'Playfair Display', 'Source Serif 4', 'Instrument Serif', 'Libre Caslon Display', 'Libre Caslon Text', 'Bodoni Moda', 'Cinzel', 'DM Serif Display', 'Alegreya', 'Zilla Slab', 'Gilda Display', 'EB Garamond', 'Libre Baskerville', 'Abril Fatface', 'Limelight', 'Prata', 'Italiana'];
 const LIGHT_ART = ['serif', 'soft', 'grid', 'leaf', 'blob', 'arch', 'confetti', 'sunset'];
@@ -139,7 +140,7 @@ function parseReviews(text) {
 
 // ---------- Contexte de rendu ----------
 
-function makeCtx({ brief, content, model, images, mode, page, imageSize }) {
+function makeCtx({ brief, content, model, images, mode, page, imageSize, jour }) {
   const m = resolveModel(model);
   const arch = m.arch;
   const t = computeTheme(arch, m.paletteIndex, brief.color);
@@ -166,7 +167,7 @@ function makeCtx({ brief, content, model, images, mode, page, imageSize }) {
   const visual = (cls, slot, artOpts) => `<div class="visual ${cls}">${visualInner(slot ?? take(1)[0], artOpts)}</div>`;
 
   const name = content.brand?.name || brief.businessName || 'Votre entreprise';
-  return { brief, content, m, arch, t, pages, has, link, visual, visualInner, imgAt, take, takeDistinct, mode, page, name, imgs };
+  return { brief, content, m, arch, t, pages, has, link, visual, visualInner, imgAt, take, takeDistinct, mode, page, name, imgs, jour: jourValide(jour) ? jour : aujourdhui() };
 }
 
 function primaryCta(ctx) {
@@ -203,6 +204,62 @@ function secondaryCta(ctx) {
 function sectionHead(title, intro, center) {
   if (!title && !intro) return '';
   return `<div class="section-head${center ? ' center' : ''}">${title ? `<h2>${esc(title)}</h2>` : ''}${intro ? `<p>${esc(intro)}</p>` : ''}</div>`;
+}
+
+// Texte saisi sur plusieurs lignes (horaires) : retours à la ligne conservés
+const multi = (s) => esc(String(s || '').trim()).replace(/\n/g, '<br>');
+
+// ---------- Contenus datés (espace client) ----------
+// Bloc visible seulement sur une période : rendu pour le jour de publication, puis
+// rallumé ou éteint chaque jour par le script du site (le site reste statique).
+function periode(ctx, f, html, tag = 'span', cls = '') {
+  const on = dansFenetre(f, ctx.jour);
+  const attrs = f.plages ? ` data-ss-plages="${f.plages.map((p) => p.join(':')).join(',')}"` : ` data-ss-du="${f.du}" data-ss-au="${f.au}"${f.annuel ? ' data-ss-annuel' : ''}`;
+  return `<${tag}${cls ? ` class="${cls}"` : ''}${attrs}${on ? '' : ' hidden'}>${html}</${tag}>`;
+}
+const pendant = (fin) => ({ du: '2000-01-01', au: fin });
+const apres = (fin) => ({ du: decaler(fin, 1), au: '2100-12-31' });
+const enOffre = (it) => it?.statut === 'offre' && jourValide(it.offreFin) && priceNumber(it.offrePrix) > 0;
+
+// Prix d'un service : prix barré et prix de l'offre jusqu'à la date de fin, puis prix habituel
+function prixService(ctx, s) {
+  const normal = formatPrice(s.price);
+  if (!enOffre(s)) return normal ? esc(normal) : '';
+  const promo = `${normal ? `<s class="ss-avant">${esc(normal)}</s> ` : ''}<span class="ss-promo">${esc(formatPrice(s.offrePrix))}</span>`;
+  return periode(ctx, pendant(s.offreFin), promo) + (normal ? periode(ctx, apres(s.offreFin), esc(normal)) : '');
+}
+
+function tagService(ctx, s) {
+  if (s.statut === 'indispo') return '<span class="ss-tag">Momentanément indisponible</span>';
+  if (enOffre(s)) return periode(ctx, pendant(s.offreFin), `Offre jusqu’au ${esc(jourTexte(s.offreFin))}`, 'span', 'ss-tag ss-tag-offre');
+  return '';
+}
+const classeService = (s) => (s.statut === 'indispo' ? ' ss-indispo' : '');
+
+// Bandeaux d'annonces en haut de chaque page : fermetures, informations, fêtes
+function annoncesBar(ctx) {
+  const list = (ctx.content.annonces || []).filter((a) => a && jourValide(a.du) && jourValide(a.au) && String(texteAnnonce(a)).trim());
+  if (!list.length) return '';
+  const ordre = { fermeture: 0, info: 1, fete: 2 };
+  const items = [...list]
+    .sort((a, b) => (ordre[a.type] ?? 1) - (ordre[b.type] ?? 1))
+    .map((a) => {
+      const fete = a.type === 'fete' ? feteParId(a.fete) : null;
+      const ico = `<span class="ss-ico">${iconeSvg(iconeDe(a), 20)}</span>`;
+      const inner = `<div class="wrap">${ico}<p>${esc(texteAnnonce(a))}</p>${fete ? ico : ''}</div>`;
+      return periode(ctx, fenetreAnnonce(a, ctx.jour), inner, 'div', `ss-annonce ss-${a.type === 'fermeture' ? 'fermeture' : a.type === 'fete' ? 'fete' : 'info'}${fete ? ' ss-f-' + fete.id : ''}`);
+    });
+  return `<div class="ss-annonces">${items.join('')}</div>`;
+}
+
+// Couleurs et motif des fêtes utilisées sur ce site
+function annoncesCss(ctx) {
+  const ids = [...new Set((ctx.content.annonces || []).filter((a) => a?.type === 'fete').map((a) => a.fete))];
+  return ids
+    .map(feteParId)
+    .filter(Boolean)
+    .map((f) => `.ss-f-${f.id}{--ss-band:${f.c.band};--ss-fg:${f.c.fg};--ss-motif:${motifUrl(f)}}`)
+    .join('');
 }
 
 // ---------- Blocs ----------
@@ -341,8 +398,8 @@ function servicesList(ctx, items, v) {
   if (v === 'menu') {
     return `<div class="svc-menu">${items
       .map((s) => {
-        const price = formatPrice(s.price);
-        return `<div class="menu-row"><div class="menu-head"><h3>${esc(s.name)}</h3>${price ? `<span class="menu-dots"></span><span class="menu-price">${esc(price)}</span>` : ''}</div>${s.description ? `<p>${esc(s.description)}</p>` : ''}</div>`;
+        const price = prixService(ctx, s);
+        return `<div class="menu-row${classeService(s)}"><div class="menu-head"><h3>${esc(s.name)}</h3>${price ? `<span class="menu-dots"></span><span class="menu-price">${price}</span>` : ''}</div>${tagService(ctx, s)}${s.description ? `<p>${esc(s.description)}</p>` : ''}</div>`;
       })
       .join('')}</div>`;
   }
@@ -350,8 +407,8 @@ function servicesList(ctx, items, v) {
     const slots = ctx.take(items.length);
     return `<div class="svc-alternate">${items
       .map((s, i) => {
-        const price = formatPrice(s.price);
-        return `<div class="alt-row">${visual('alt-visual', slots[i])}<div><h3>${esc(s.name)}</h3>${s.description ? `<p class="lead">${esc(s.description)}</p>` : ''}${price ? `<p class="price">${esc(price)}</p>` : ''}</div></div>`;
+        const price = prixService(ctx, s);
+        return `<div class="alt-row${classeService(s)}">${visual('alt-visual', slots[i])}<div><h3>${esc(s.name)}</h3>${tagService(ctx, s)}${s.description ? `<p class="lead">${esc(s.description)}</p>` : ''}${price ? `<p class="price">${price}</p>` : ''}</div></div>`;
       })
       .join('')}</div>`;
   }
@@ -359,15 +416,15 @@ function servicesList(ctx, items, v) {
     const slots = ctx.take(items.length);
     return `<div class="svc-cards n-${items.length}">${items
       .map((s, i) => {
-        const price = formatPrice(s.price);
-        return `<article class="svc-imgcard">${visual('svc-img', slots[i])}<div class="svc-body"><h3>${esc(s.name)}</h3>${s.description ? `<p>${esc(s.description)}</p>` : ''}${price ? `<span class="price">${esc(price)}</span>` : ''}</div></article>`;
+        const price = prixService(ctx, s);
+        return `<article class="svc-imgcard${classeService(s)}">${visual('svc-img', slots[i])}<div class="svc-body"><h3>${esc(s.name)}</h3>${tagService(ctx, s)}${s.description ? `<p>${esc(s.description)}</p>` : ''}${price ? `<span class="price">${price}</span>` : ''}</div></article>`;
       })
       .join('')}</div>`;
   }
   return `<div class="svc-grid">${items
     .map((s) => {
-      const price = formatPrice(s.price);
-      return `<article class="svc-card"><div class="f-icon">${icon(s.icon)}</div><h3>${esc(s.name)}</h3>${s.description ? `<p>${esc(s.description)}</p>` : ''}${price ? `<div class="price">${esc(price)}</div>` : ''}</article>`;
+      const price = prixService(ctx, s);
+      return `<article class="svc-card${classeService(s)}"><div class="f-icon">${icon(s.icon)}</div><h3>${esc(s.name)}</h3>${tagService(ctx, s)}${s.description ? `<p>${esc(s.description)}</p>` : ''}${price ? `<div class="price">${price}</div>` : ''}</article>`;
     })
     .join('')}</div>`;
 }
@@ -395,7 +452,9 @@ function productCards(ctx, items) {
   return `<div class="products${v === 'minimal' ? ' products-minimal' : ''}">${items
     .map((p, i) => {
       const price = priceNumber(p.price);
-      const id = slugify(p.name) + '-' + i;
+      const id = p.sid || slugify(p.name) + '-' + i;
+      const rupture = p.statut === 'rupture';
+      const offre = !rupture && enOffre(p) && price !== null && priceNumber(p.offrePrix) < price;
       const initials = String(p.name || '?')
         .split(/\s+/)
         .slice(0, 2)
@@ -403,7 +462,21 @@ function productCards(ctx, items) {
         .join('')
         .toUpperCase();
       const pic = art(arch.art, t, (m.seed + 1) * 61 + i * 17, { label: initials, labelColor: lightArt ? t.text : '#ffffff' });
-      return `<article class="product" data-cat="${esc(slugify(p.category || 'tous'))}"><div class="visual p-visual">${p.badge ? `<span class="badge">${esc(p.badge)}</span>` : ''}${pic}</div><h3>${esc(p.name)}</h3>${p.description ? `<p>${esc(p.description)}</p>` : ''}<div class="p-row"><span class="p-price">${price !== null ? esc(formatPrice(price)) : 'Prix sur demande'}</span>${price !== null ? `<button class="btn small" type="button" data-add="${esc(id)}" data-name="${esc(p.name)}" data-price="${price}">${icon('plus', { size: 16 })}Ajouter</button>` : ''}</div></article>`;
+      const badgeNormal = p.badge ? `<span class="badge">${esc(p.badge)}</span>` : '';
+      let badge = badgeNormal;
+      let prix = price !== null ? esc(formatPrice(price)) : 'Prix sur demande';
+      let bouton = price !== null ? `<button class="btn small" type="button" data-add="${esc(id)}" data-name="${esc(p.name)}" data-price="${price}">${icon('plus', { size: 16 })}Ajouter</button>` : '';
+      if (rupture) {
+        badge = '<span class="badge ss-badge-rupture">Rupture de stock</span>';
+        bouton = `<button class="btn small" type="button" disabled data-ss-epuise="${esc(id)}">Épuisé</button>`;
+      } else if (offre) {
+        const promo = priceNumber(p.offrePrix);
+        badge = periode(ctx, pendant(p.offreFin), '<span class="badge ss-badge-offre">Offre</span>') + (badgeNormal ? periode(ctx, apres(p.offreFin), badgeNormal) : '');
+        prix = periode(ctx, pendant(p.offreFin), `<s class="ss-avant">${esc(formatPrice(price))}</s> <span class="ss-promo">${esc(formatPrice(promo))}</span>`) + periode(ctx, apres(p.offreFin), esc(formatPrice(price)));
+        const prixDuJour = p.offreFin >= ctx.jour ? promo : price;
+        bouton = `<button class="btn small" type="button" data-add="${esc(id)}" data-name="${esc(p.name)}" data-price="${prixDuJour}" data-ss-fin="${p.offreFin}" data-ss-prix="${price}" data-ss-offre="${promo}">${icon('plus', { size: 16 })}Ajouter</button>`;
+      }
+      return `<article class="product${rupture ? ' ss-rupture' : ''}" data-cat="${esc(slugify(p.category || 'tous'))}"><div class="visual p-visual">${badge}${pic}</div><h3>${esc(p.name)}</h3>${p.description ? `<p>${esc(p.description)}</p>` : ''}<div class="p-row"><span class="p-price">${prix}</span>${bouton}</div></article>`;
     })
     .join('')}</div>`;
 }
@@ -519,7 +592,7 @@ function infoStrip(ctx, alt) {
   const { brief } = ctx;
   const items = [];
   if (brief.address) items.push(`<div class="info-item"><div class="f-icon">${icon('pin', { size: 20 })}</div><div><h3>Adresse</h3><a href="${mapsHref(brief.address)}" target="_blank" rel="noopener">${esc(brief.address)}</a></div></div>`);
-  if (brief.hours) items.push(`<div class="info-item"><div class="f-icon">${icon('clock', { size: 20 })}</div><div><h3>Horaires</h3><p>${esc(brief.hours)}</p></div></div>`);
+  if (brief.hours) items.push(`<div class="info-item"><div class="f-icon">${icon('clock', { size: 20 })}</div><div><h3>Horaires</h3><p>${multi(brief.hours)}</p></div></div>`);
   if (brief.phone) items.push(`<div class="info-item"><div class="f-icon">${icon('phone', { size: 20 })}</div><div><h3>Téléphone</h3><a href="${telHref(brief.phone)}">${esc(brief.phone)}</a></div></div>`);
   if (brief.email && items.length < 3) items.push(`<div class="info-item"><div class="f-icon">${icon('mail', { size: 20 })}</div><div><h3>E-mail</h3><a href="mailto:${esc(brief.email)}">${esc(brief.email)}</a></div></div>`);
   if (items.length < 2) return '';
@@ -573,7 +646,7 @@ function footer(ctx) {
   const fourth = nl
     ? `<div><h4>Newsletter</h4><p>Les nouveautés, quelques fois par an.</p>${nl}</div>`
     : brief.hours
-      ? `<div><h4>Horaires</h4><p>${esc(brief.hours)}</p></div>`
+      ? `<div><h4>Horaires</h4><p>${multi(brief.hours)}</p></div>`
       : '<div></div>';
   return `<footer class="site-footer"><div class="wrap"><div class="footer-cols"><div><a class="logo" ${link('index')}>${esc(name)}</a><p>${esc(c.brand?.tagline || '')}</p>${socials(ctx)}</div><div><h4>Navigation</h4><ul>${pageLinks}</ul></div><div><h4>Contact</h4><ul>${contact || `<li><a ${link('contact')}>Nous écrire</a></li>`}</ul></div>${fourth}</div>${bottom}</div></footer>`;
 }
@@ -722,7 +795,7 @@ function contactBody(ctx) {
   if (brief.phone) info.push(`<div class="info-item"><div class="f-icon">${icon('phone', { size: 20 })}</div><div><h3>Téléphone</h3><a href="${telHref(brief.phone)}">${esc(brief.phone)}</a></div></div>`);
   if (brief.email) info.push(`<div class="info-item"><div class="f-icon">${icon('mail', { size: 20 })}</div><div><h3>E-mail</h3><a href="mailto:${esc(brief.email)}">${esc(brief.email)}</a></div></div>`);
   if (brief.address) info.push(`<div class="info-item"><div class="f-icon">${icon('pin', { size: 20 })}</div><div><h3>Adresse</h3><p>${esc(brief.address)}</p><a class="link-arrow map-link" href="${mapsHref(brief.address)}" target="_blank" rel="noopener">Voir sur la carte</a></div></div>`);
-  if (brief.hours) info.push(`<div class="info-item"><div class="f-icon">${icon('clock', { size: 20 })}</div><div><h3>Horaires</h3><p>${esc(brief.hours)}</p></div></div>`);
+  if (brief.hours) info.push(`<div class="info-item"><div class="f-icon">${icon('clock', { size: 20 })}</div><div><h3>Horaires</h3><p>${multi(brief.hours)}</p></div></div>`);
   const svcOptions = (c.services || []).map((s) => `<option>${esc(s.name)}</option>`).join('');
   const subject = booking ? 'Demande de réservation' : quote ? 'Demande de devis' : 'Message depuis le site';
   const submit = booking ? 'Envoyer ma demande de réservation' : quote ? 'Demander mon devis' : 'Envoyer le message';
@@ -752,17 +825,22 @@ function legalBody(ctx) {
   );
 }
 
-const SCRIPT = (preview) => `(function(){var d=document,P=${preview ? 'true' : 'false'};
+const SCRIPT = (preview, jour) => `(function(){var d=document,P=${preview ? 'true' : 'false'};
 var b=d.querySelector('[data-burger]'),h=d.querySelector('[data-header]');
 if(b&&h){b.addEventListener('click',function(){var o=h.classList.toggle('menu-open');b.setAttribute('aria-expanded',o?'true':'false');});}
-if(P){d.addEventListener('click',function(e){var a=e.target.closest('a');if(!a)return;var p=a.getAttribute('data-page');e.preventDefault();if(p){parent.postMessage({type:'site-nav',page:p},'*');}});}
+if(P){d.addEventListener('click',function(e){var a=e.target.closest('a');if(!a)return;var p=a.getAttribute('data-page');e.preventDefault();if(p){parent.postMessage({type:'site-nav',page:p},'*');}});var st=0;addEventListener('scroll',function(){clearTimeout(st);st=setTimeout(function(){parent.postMessage({type:'site-scroll',y:scrollY},'*');},150);},{passive:true});addEventListener('message',function(e){if(e.source===parent&&e.data&&e.data.type==='site-scroll-to')scrollTo(0,+e.data.y||0);});}
 function fmt(n){return n.toLocaleString('fr-FR',{minimumFractionDigits:n%1?2:0,maximumFractionDigits:2})+' €';}
 function lines(f){var out=[];new FormData(f).forEach(function(v,k){if(String(v).trim())out.push(k+' : '+v);});return out;}
 function send(f,extra){var to=f.getAttribute('data-mailto'),s=f.getAttribute('data-subject')||'Message';var body=(extra||[]).concat(lines(f)).join('\\n');var ok=f.querySelector('.form-ok');if(ok)ok.style.display='block';if(!P&&to){location.href='mailto:'+to+'?subject='+encodeURIComponent(s)+'&body='+encodeURIComponent(body);}}
 d.querySelectorAll('form[data-mailto]:not([data-checkout])').forEach(function(f){f.addEventListener('submit',function(e){e.preventDefault();send(f);});});
 d.querySelectorAll('[data-filter]').forEach(function(c){c.addEventListener('click',function(){var v=c.getAttribute('data-filter');d.querySelectorAll('[data-filter]').forEach(function(x){x.setAttribute('aria-pressed',x===c?'true':'false');});d.querySelectorAll('.product').forEach(function(p){p.hidden=!(v==='*'||p.getAttribute('data-cat')===v);});});});
+var J=P?'${jour}':(function(){try{var p={};new Intl.DateTimeFormat('en-US',{timeZone:'Europe/Paris',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date()).forEach(function(x){p[x.type]=x.value;});if(p.year&&p.month&&p.day)return p.year+'-'+p.month+'-'+p.day;}catch(e){}var x=new Date();return x.getFullYear()+'-'+('0'+(x.getMonth()+1)).slice(-2)+'-'+('0'+x.getDate()).slice(-2);})();
+d.querySelectorAll('[data-ss-du],[data-ss-plages]').forEach(function(el){var on=false,pl=el.getAttribute('data-ss-plages');if(pl!==null){pl.split(',').forEach(function(r){var q=r.split(':');if(J>=q[0]&&J<=q[1])on=true;});}else{var a=el.getAttribute('data-ss-du'),z=el.getAttribute('data-ss-au');if(el.hasAttribute('data-ss-annuel')){var m=J.slice(5),x=a.slice(5),y=z.slice(5);on=x<=y?(m>=x&&m<=y):(m>=x||m<=y);}else{on=J>=a&&J<=z;}}el.hidden=!on;});
+d.querySelectorAll('[data-ss-fin]').forEach(function(el){el.setAttribute('data-price',J>el.getAttribute('data-ss-fin')?el.getAttribute('data-ss-prix'):el.getAttribute('data-ss-offre'));});
 var lb=d.querySelector('[data-cart-lines]');if(!lb)return;
 var K='panier-'+location.pathname.split('/').slice(0,-1).join('/'),cart=[];try{cart=JSON.parse(localStorage.getItem(K))||[];}catch(e){}
+var ep={},bt={};d.querySelectorAll('[data-ss-epuise]').forEach(function(x){ep[x.getAttribute('data-ss-epuise')]=1;});d.querySelectorAll('[data-add]').forEach(function(x){bt[x.getAttribute('data-add')]=x;});
+cart=Array.isArray(cart)?cart.filter(function(it){if(!it||ep[it.id])return false;var b=bt[it.id];if(b)it.p=parseFloat(b.getAttribute('data-price'));return true;}):[];
 function save(){try{localStorage.setItem(K,JSON.stringify(cart));}catch(e){}}
 function render(){var n=0,t=0;lb.innerHTML='';cart.forEach(function(it,i){n+=it.q;t+=it.q*it.p;var row=d.createElement('div');row.className='cart-line';var nm=d.createElement('strong');nm.textContent=it.n;var pr=d.createElement('span');pr.textContent=fmt(it.q*it.p);var q=d.createElement('div');q.className='qty';q.innerHTML='<button type="button" aria-label="Retirer un">−</button><span></span><button type="button" aria-label="Ajouter un">+</button>';q.querySelector('span').textContent=it.q;q.children[0].onclick=function(){it.q--;if(it.q<1)cart.splice(i,1);save();render();};q.children[2].onclick=function(){it.q++;save();render();};row.appendChild(nm);row.appendChild(pr);row.appendChild(q);lb.appendChild(row);});
 if(!cart.length){lb.innerHTML='<p class="cart-empty">Votre panier est vide.</p>';}
@@ -779,8 +857,8 @@ function favicon(name, t) {
   return 'data:image/svg+xml,' + encodeURIComponent(svg);
 }
 
-export function renderPage(slug, { brief, content, model, images, mode = 'preview', imageSize = 'full' }) {
-  const ctx = makeCtx({ brief, content, model, images, mode, page: slug, imageSize });
+export function renderPage(slug, { brief, content, model, images, mode = 'preview', imageSize = 'full', jour }) {
+  const ctx = makeCtx({ brief, content, model, images, mode, page: slug, imageSize, jour });
   const { arch, t, m, name, pages } = ctx;
   let body;
   switch (slug) {
@@ -810,7 +888,7 @@ export function renderPage(slug, { brief, content, model, images, mode = 'previe
   const description = content.seo?.description || content.brand?.short || brief.description || '';
   const shop = brief.siteType === 'boutique' && (content.products || []).length ? cartUi(ctx) : '';
   const stripes = arch.stripes ? '<div class="stripes"></div>' : '';
-  return `<!doctype html><html lang="fr" class="a-${arch.id}${m.flavor ? ' fl-' + m.flavor.id : ''} nav-${m.variants.nav}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title><meta name="description" content="${esc(String(description).slice(0, 160))}"><link rel="icon" href="${favicon(name, t)}"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="${fontsHref(arch)}"><style>${cssVars(arch, t)}${BASE_CSS}${arch.css}${m.comp.css || ''}</style></head><body><a class="skip" href="#main">Aller au contenu</a>${header(ctx)}<main id="main">${body}</main>${stripes}${footer(ctx)}${shop}<script>${SCRIPT(mode !== 'export')}</script></body></html>`;
+  return `<!doctype html><html lang="fr" class="a-${arch.id}${m.flavor ? ' fl-' + m.flavor.id : ''} nav-${m.variants.nav}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title><meta name="description" content="${esc(String(description).slice(0, 160))}"><link rel="icon" href="${favicon(name, t)}"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="${fontsHref(arch)}"><style>${cssVars(arch, t)}${BASE_CSS}${arch.css}${m.comp.css || ''}${ESPACE_CSS}${annoncesCss(ctx)}</style></head><body><a class="skip" href="#main">Aller au contenu</a>${annoncesBar(ctx)}${header(ctx)}<main id="main">${body}</main>${stripes}${footer(ctx)}${shop}<script>${SCRIPT(mode !== 'export', ctx.jour)}</script></body></html>`;
 }
 
 export function allPageSlugs(brief, content) {

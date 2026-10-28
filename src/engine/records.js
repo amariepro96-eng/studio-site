@@ -60,7 +60,8 @@ export function renderImages(rec, origin = '') {
   return recordImages(rec).map((img) => {
     if (img.source === 'unsplash') return { ...img };
     const url = `${origin}/api/files/${rec.id}/${img.id}`;
-    const name = img.source === 'ia' ? 'image-ia' : 'photo';
+    // Une image d'illustration remplacée par une vraie photo (espace client) garde sa place dans le site
+    const name = img.source === 'ia' && !img.reel ? 'image-ia' : 'photo';
     return { ...img, url, thumb: url, file: `images/${name}-${img.id.slice(-6).toLowerCase()}.${extOf(img)}` };
   });
 }

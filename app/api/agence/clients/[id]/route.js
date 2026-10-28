@@ -1,9 +1,13 @@
+import { after } from 'next/server';
 import { route, ok, readBody, fail, sanitizeBrief } from '../../../../../src/server/http.js';
 import { getClient, updateClient, deleteClient, STATUSES, validId, getSettings } from '../../../../../src/server/store.js';
 import { STAGES } from '../../../../../src/engine/records.js';
+import { driveStatus, envoyerVersDrive } from '../../../../../src/server/drive.js';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+// Génération enregistrée : le brief et les photos partent ensuite vers Google Drive
+export const maxDuration = 300;
 
 const TEXT = { name: 120, contact: 200, formula: 60, message: 4000, liveUrl: 300 };
 
@@ -44,8 +48,14 @@ export const PATCH = route(
       if (typeof set.imageBatch === 'string') r.imageBatch = set.imageBatch.slice(0, 40);
       if (set.status && STATUSES.includes(set.status)) r.status = set.status;
       if (Number.isInteger(set.qStep)) r.qStep = Math.max(0, Math.min(7, set.qStep));
-      if ('result' in set) r.result = set.result === null ? null : cleanResult(set.result) || r.result;
-      if (Array.isArray(set.aiImages)) r.aiImages = set.aiImages.filter((x) => validId(x?.id)).map((x) => ({ id: x.id, ext: x.ext === 'png' ? 'png' : 'jpg', alt: String(x.alt || '').slice(0, 200) })).slice(0, 20);
+      if ('result' in set) {
+        const clean = set.result === null ? null : cleanResult(set.result);
+        // Les textes du site ne changent qu'à une nouvelle génération : une modification du modèle
+        // (variante, palette) ne doit pas effacer ce que le client a changé depuis son espace
+        if (clean && r.result?.content && set.status !== 'generated') clean.content = r.result.content;
+        r.result = set.result === null ? null : clean || r.result;
+      }
+      if (Array.isArray(set.aiImages)) r.aiImages = set.aiImages.filter((x) => validId(x?.id)).map((x) => ({ id: x.id, ext: ['png', 'webp'].includes(x.ext) ? x.ext : 'jpg', alt: String(x.alt || '').slice(0, 200), ...(x.reel ? { reel: true } : {}) })).slice(0, 20);
       if (Array.isArray(set.stockImages)) r.stockImages = set.stockImages.filter((x) => typeof x?.url === 'string' && /^https:\/\//.test(x.url)).slice(0, 12);
       if (Array.isArray(set.picked)) r.picked = set.picked.filter((x) => typeof x === 'string').slice(0, 5);
       if ('choice' in set) r.choice = set.choice && typeof set.choice.modelId === 'string' ? { modelId: set.choice.modelId, comment: String(set.choice.comment || '').slice(0, 2000), at: set.choice.at || new Date().toISOString(), by: set.choice.by === 'agence' ? 'agence' : 'client' } : null;
@@ -59,6 +69,7 @@ export const PATCH = route(
     });
     if (!rec) return fail(404, 'Dossier introuvable.', 'not_found');
     if (stale) return fail(409, 'Le client a modifié ses réponses pendant que vous éditiez le brief. Rechargez la page pour repartir de sa dernière version.', 'stale');
+    if (set.status === 'generated' && driveStatus().configured) after(() => envoyerVersDrive(id).catch((e) => console.warn('[drive]', e?.message)));
     return ok({ client: rec });
   },
   { agency: true }

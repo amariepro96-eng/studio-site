@@ -458,3 +458,27 @@ ul{padding-left:1.1em}
   .hero-panel .panel{padding:24px 20px 28px}
 }
 `;
+
+// Ajouts de l'espace client : bandeaux d'annonces, offres, ruptures de stock.
+// Placés après les styles de la direction artistique pour garder la priorité.
+export const ESPACE_CSS = `
+[hidden]{display:none!important}
+.ss-annonces .ss-annonce{position:relative;overflow:hidden;background:var(--primary);color:var(--on-primary);font-family:var(--font-body);font-size:.95rem;line-height:1.35;text-transform:none;letter-spacing:0}
+.ss-annonces .ss-annonce .wrap{position:relative;z-index:1;display:flex;align-items:center;justify-content:center;gap:.65em;padding-top:.7em;padding-bottom:.7em;text-align:center}
+.ss-annonces .ss-annonce p{margin:0;font-weight:600;text-wrap:balance;color:inherit}
+.ss-annonces .ss-ico{display:inline-flex;flex:none}
+.ss-annonces .ss-annonce.ss-fermeture{background:var(--text);color:var(--bg)}
+.ss-annonces .ss-annonce.ss-fete{background:var(--ss-band);color:var(--ss-fg)}
+.ss-annonces .ss-annonce.ss-fete::before,.ss-annonces .ss-annonce.ss-fete::after{content:"";position:absolute;top:0;bottom:0;width:min(26%,260px);background:var(--ss-motif) 0 0/44px 44px;opacity:.55;pointer-events:none}
+.ss-annonces .ss-annonce.ss-fete::before{left:0;-webkit-mask-image:linear-gradient(90deg,#000,transparent);mask-image:linear-gradient(90deg,#000,transparent)}
+.ss-annonces .ss-annonce.ss-fete::after{right:0;-webkit-mask-image:linear-gradient(270deg,#000,transparent);mask-image:linear-gradient(270deg,#000,transparent)}
+.ss-annonces .ss-annonce + .ss-annonce{border-top:1px solid rgba(127,127,127,.25)}
+@media (max-width:560px){.ss-annonces .ss-annonce{font-size:.88rem}.ss-annonces .ss-annonce.ss-fete::before,.ss-annonces .ss-annonce.ss-fete::after{width:16%}}
+.ss-tag{display:inline-flex;align-items:center;align-self:flex-start;width:fit-content;font-family:var(--font-body);font-size:.78rem;font-weight:700;letter-spacing:0;text-transform:none;line-height:1.25;padding:.32em .75em;border-radius:999px;background:var(--text);color:var(--bg);margin:.25em 0 .55em}
+.ss-tag.ss-tag-offre{background:var(--accent);color:var(--on-accent)}
+.ss-avant{opacity:.62;font-weight:400;margin-right:.2em}
+.ss-indispo h3,.ss-indispo p,.ss-indispo .price,.ss-indispo .menu-price,.ss-indispo .visual{opacity:.55}
+.product.ss-rupture .p-visual{filter:grayscale(1) opacity(.7)}
+.badge.ss-badge-rupture{background:var(--text);color:var(--bg)}
+.btn[disabled]{opacity:.55;cursor:not-allowed;transform:none}
+`;

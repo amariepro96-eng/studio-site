@@ -7,7 +7,7 @@ import { StorageSetup } from './Dashboard.jsx';
 const FIELDS = [
   { id: 'studioName', label: 'Nom affiché aux clients', hint: 'En haut du questionnaire et de la page de propositions.' },
   { id: 'ownerName', label: 'Votre prénom', hint: 'Signature des messages : « Alexandre prépare vos propositions ».' },
-  { id: 'email', label: 'E-mail de contact', hint: 'Affiché en bas des pages client. Facultatif.' },
+  { id: 'email', label: 'E-mail de contact', hint: 'Affiché en bas des pages client. Reçoit aussi les alertes des espaces clients (demandes, publications), si Brevo est branché.' },
   { id: 'phone', label: 'Téléphone de contact', hint: 'Affiché en bas des pages client. Facultatif.' },
   { id: 'hosting', label: 'Hébergeur des sites (mentions légales)', hint: 'Repris automatiquement dans la page « Mentions légales » de chaque site. Vérifiez l’adresse sur vercel.com/legal.', long: true },
 ];
@@ -19,11 +19,13 @@ export default function Settings({ studioName }) {
   const [busy, setBusy] = useState(false);
   const [storage, setStorage] = useState(null);
   const [pub, setPub] = useState(null);
+  const [services, setServices] = useState(null);
   useEffect(() => {
     api('/api/agence/settings')
       .then((d) => {
         setS(d.settings);
         setPub(d.publication || null);
+        setServices(d.services || null);
       })
       .catch((e) => setError(e.message));
     api('/api/agence/clients')
@@ -39,6 +41,7 @@ export default function Settings({ studioName }) {
       const d = await api('/api/agence/settings', { method: 'PUT', body: { settings: s } });
       setS(d.settings);
       setPub(d.publication || null);
+      setServices(d.services || null);
       setNote('Réglages enregistrés.');
     } catch (err) {
       setError(err.message);
@@ -79,6 +82,7 @@ export default function Settings({ studioName }) {
               </div>
             ))}
             {pub && <PublishSettings pub={pub} value={!!s.autoPublish} onChange={(v) => setS({ ...s, autoPublish: v })} />}
+            {services && <Services services={services} />}
             <div className="form-actions">
               <button type="submit" className="btn primary" disabled={busy}>
                 {busy ? 'Enregistrement…' : 'Enregistrer'}
@@ -92,6 +96,36 @@ export default function Settings({ studioName }) {
           </form>
         )}
       </main>
+    </div>
+  );
+}
+
+// Google Drive et e-mails : branchés ou non (variables Vercel)
+function Services({ services }) {
+  const ligne = (st, nom, ok) => (
+    <li className={st.configured ? 'is-ok' : 'is-wait'}>
+      <span>
+        {nom} : {st.configured ? ok : (
+          <>
+            pas branché, il manque {st.missing.map((m, i) => (
+              <span key={m}>
+                {i > 0 && ' et '}
+                <code>{m}</code>
+              </span>
+            ))}
+          </>
+        )}
+      </span>
+    </li>
+  );
+  return (
+    <div className="q-field pub-settings">
+      <span className="q-label">Services branchés</span>
+      <ul className="pub-checks">
+        {ligne(services.drive, 'Google Drive', 'fiche brief, photos et versions rangées dans le dossier du client')}
+        {ligne(services.mail, 'E-mails de l’espace client (Brevo)', `envoyés depuis ${services.mail.from}`)}
+      </ul>
+      <p className="q-hint">Facultatifs. Sans Google Drive, rien n’arrive tout seul dans le tableau Suivi clients ; sans Brevo, tu copies toi-même les messages de l’espace client (document 13, §J).</p>
     </div>
   );
 }

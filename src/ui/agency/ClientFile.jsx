@@ -1,10 +1,13 @@
 'use client';
 // Dossier d'un client : du questionnaire envoyé jusqu'au site en ligne
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { api, uploadImage, copyText, saveBlob } from '../api.js';
+import { api, uploadImage, saveBlob } from '../api.js';
 import { AgencyBar, StageStrip, Spinner } from '../Chrome.jsx';
 import { AgencyForm } from '../Questionnaire.jsx';
 import Publication from './Publication.jsx';
+import EspaceAgence from './EspaceAgence.jsx';
+import DriveAgence from './DriveAgence.jsx';
+import SendBox from './SendBox.jsx';
 import { remoteExtra } from '../RemoteMedia.jsx';
 import { ThumbFrame, DeviceFrame, DeviceToggle, PageTabs } from '../Frames.jsx';
 import { Generating, PreviewModal, ImageStatus, archName, varyModel, nextPalette } from '../App.jsx';
@@ -21,60 +24,6 @@ const STEPS7 = remoteSteps({ strict: false });
 const fmtDate = (iso) => (iso ? new Date(iso).toLocaleString('fr-FR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) : '');
 // Brief à modifier : réponses existantes, nom du dossier si le client ne l'a pas encore saisi
 const draftFrom = (rec) => ({ ...emptyBrief(), ...(rec.brief || {}), businessName: rec.brief?.businessName || rec.name || '' });
-const isEmail = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s || '').trim());
-const isPhone = (s) => /^[+\d][\d\s.-]{7,}$/.test(String(s || '').trim());
-
-// ---------- Envoi d'un lien (questionnaire ou propositions) ----------
-function SendBox({ link, text, contact, subject, openLabel }) {
-  const [note, setNote] = useState('');
-  const [body, setBody] = useState(text);
-  useEffect(() => setBody(text), [text]);
-  async function copy(what, value) {
-    const ok = await copyText(value);
-    setNote(ok ? `${what} copié.` : 'Copie impossible : sélectionnez le texte à la main.');
-    setTimeout(() => setNote(''), 2500);
-  }
-  const mail = `mailto:${isEmail(contact) ? contact.trim() : ''}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-  const sms = `sms:${String(contact || '').replace(/[^\d+]/g, '')}?&body=${encodeURIComponent(body)}`;
-  return (
-    <div className="sendbox">
-      <div className="linkline">
-        <input type="text" readOnly value={link} aria-label="Lien à envoyer" onFocus={(e) => e.target.select()} />
-        <button type="button" className="btn secondary small" onClick={() => copy('Lien', link)}>
-          Copier le lien
-        </button>
-        <a className="btn-text small" href={link} target="_blank" rel="noopener noreferrer">
-          {openLabel}
-        </a>
-      </div>
-      <div className="q-field">
-        <label className="q-label" htmlFor="send-text">
-          Message à envoyer
-        </label>
-        <textarea id="send-text" rows={7} value={body} onChange={(e) => setBody(e.target.value)} />
-      </div>
-      <div className="row-actions">
-        <button type="button" className="btn primary small" onClick={() => copy('Message', body)}>
-          Copier le message
-        </button>
-        <a className="btn secondary small" href={mail}>
-          Ouvrir dans ma messagerie
-        </a>
-        {isPhone(contact) && (
-          <a className="btn secondary small" href={sms}>
-            Préparer un SMS
-          </a>
-        )}
-        {note && (
-          <span className="side-note" role="status">
-            {note}
-          </span>
-        )}
-      </div>
-      <p className="muted small">L’application n’envoie rien elle-même : copiez le message ou ouvrez votre messagerie, puis envoyez-le.</p>
-    </div>
-  );
-}
 
 // ---------- Réponses du client ----------
 const labelOf = (list, id) => list.find((o) => o.id === id)?.label || id;
@@ -395,6 +344,7 @@ function Workspace({ rec, settings, brief, images, save, onReselect, onRecord, o
         </div>
         <aside className="workspace-side">
           <Publication rec={rec} onRecord={onRecord} onEditBrief={onEditBrief} />
+          <EspaceAgence rec={rec} onRecord={onRecord} settings={settings} />
           <button type="button" className="btn secondary block" onClick={download} disabled={busy}>
             {busy ? 'Préparation du fichier…' : 'Télécharger le site (.zip)'}
           </button>
@@ -415,7 +365,7 @@ function Workspace({ rec, settings, brief, images, save, onReselect, onRecord, o
           )}
           {rec.brief?.logo && (
             <label className="q-toggle compact">
-              <input type="checkbox" checked={rec.brief.logoInHeader !== false} onChange={(e) => save({ brief: { ...rec.brief, logoInHeader: e.target.checked } }, null, true)} />
+              <input type="checkbox" checked={rec.brief.logoInHeader !== false} onChange={(e) => save({ brief: { ...rec.brief, logoInHeader: e.target.checked } }, null, true, { briefRev: rec.briefRev || 0 }).catch(() => {})} />
               <span>
                 <span className="q-option-title">Logo du client dans l’en-tête</span>
               </span>
@@ -892,6 +842,7 @@ export default function ClientFile({ id, studioName }) {
                 </button>
               )}
             </section>
+            <DriveAgence rec={rec} onRecord={(client) => pendingRef.current === 0 && setRec(client)} />
             <section className="card side-card">
               <h2>Historique</h2>
               <ol className="log">

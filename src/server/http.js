@@ -13,7 +13,7 @@ export function ok(data) {
   return Response.json(data, { headers: { 'Cache-Control': 'no-store' } });
 }
 
-function readCookie(req, name) {
+export function readCookie(req, name) {
   const raw = req.headers.get('cookie') || '';
   for (const part of raw.split(';')) {
     const [k, ...v] = part.trim().split('=');
@@ -28,6 +28,25 @@ export function isAgency(req) {
   if (!agencyPassword) return !process.env.VERCEL;
   return safeEqual(readCookie(req, 'agence'), agencyToken(agencyPassword));
 }
+
+// Refuse les appels venus d'un autre site (les cookies ne doivent servir qu'ici)
+export function memeOrigine(req) {
+  const origin = req.headers.get('origin');
+  if (!origin) return req.method === 'GET' || req.headers.get('sec-fetch-site') !== 'cross-site';
+  try {
+    return new URL(origin).host === (req.headers.get('x-forwarded-host') || req.headers.get('host'));
+  } catch {
+    return false;
+  }
+}
+
+// Adresse publique de l'application (pour les liens envoyés aux clients)
+export function origine(req) {
+  const host = req.headers.get('x-forwarded-host') || req.headers.get('host') || new URL(req.url).host;
+  const proto = req.headers.get('x-forwarded-proto') || new URL(req.url).protocol.replace(':', '');
+  return `${proto.split(',')[0].trim()}://${host}`;
+}
+export const enHttps = (req) => origine(req).startsWith('https://');
 
 export function safeEqual(a, b) {
   const x = Buffer.from(String(a || ''));

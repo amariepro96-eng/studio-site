@@ -244,7 +244,8 @@ export async function verifier(rec, { identifiant } = {}) {
   const status = publishStatus(settings);
   const pub = rec.publication || null;
   const fixe = Boolean(pub?.repo);
-  const id = fixe ? pub.identifiant : identifiantDe(identifiant || rec.brief?.businessName || rec.name);
+  // Par défaut, le même identifiant que le dossier Google Drive du client (tableau Suivi clients)
+  const id = fixe ? pub.identifiant : identifiantDe(identifiant || rec.drive?.identifiant || rec.brief?.businessName || rec.name);
   const { pages, binaries, manques } = await siteFiles(rec, settings);
   const out = {
     status,
@@ -283,7 +284,7 @@ export async function etapeDepot(rec, identifiant) {
     if (res.status === 404) throw new StoreError(`Le dépôt ${pub.repo} n’existe plus sur GitHub. Il a été supprimé ou transféré : vérifie avant de continuer.`, 'repo_gone', 409);
     throw ghFail(res, 'lecture du dépôt');
   }
-  const id = identifiantDe(identifiant || rec.brief?.businessName || rec.name);
+  const id = identifiantDe(identifiant || rec.drive?.identifiant || rec.brief?.businessName || rec.name);
   if (!identifiantValide(id)) throw new StoreError('Identifiant invalide : lettres minuscules, chiffres et tirets uniquement.', 'bad_id', 400);
   const name = `site-${id}`;
   const existe = await gh(`/repos/${env.org}/${name}`);

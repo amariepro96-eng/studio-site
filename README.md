@@ -10,6 +10,7 @@ Le parcours client se gère depuis l'**espace agence** (`/agence`, protégé par
 4. **Sélection** : l'agence retient 2 à 5 modèles et écrit un message. Le client les découvre sur sa page privée (`/propositions/…`).
 5. **Choix** : le client choisit un modèle et laisse un commentaire.
 6. **Mise en service** : aperçu complet, téléchargement du .zip (mentions légales et logo déjà remplis), liste de contrôle, puis « Site en ligne ».
+7. **Espace client** (`/espace/…`) : livré avec le site, il permet au client de modifier lui-même ses horaires, prix, annonces et photos (voir plus bas).
 
 L'**Atelier libre** (`/agence/atelier`) garde l'ancien fonctionnement : brief sur une page, 10 modèles, .zip, sans rien enregistrer. La page d'accueil (`/`) ne génère plus rien : elle oriente les visiteurs.
 
@@ -55,12 +56,34 @@ Sans stockage, l'espace agence affiche la marche à suivre ; seul l'Atelier libr
 | `GITHUB_PUBLISH_ORG` | Organisation GitHub des sites clients (défaut : `Station-Site`) | Non |
 | `VERCEL_PUBLISH_TOKEN` | Clé Vercel limitée à l'équipe Pro | Pour la mise en ligne automatique |
 | `VERCEL_TEAM_ID` | Identifiant de l'équipe Vercel, seulement si la clé en voit plusieurs | Non |
+| `BREVO_API_KEY` | Clé API Brevo : envoi des accès, des liens de connexion et des notifications de l'espace client | Non (sinon, messages à copier) |
+| `EMAIL_FROM` | Adresse d'expédition validée dans Brevo (ex. `contact@ton-domaine.fr`) | Avec Brevo |
+| `EMAIL_FROM_NAME` | Nom affiché comme expéditeur (défaut : le nom du studio dans Réglages) | Non |
+| `DRIVE_WEBHOOK_URL` | Adresse de l'application Web du script « Automatisation dossiers clients » (finit par `/exec`) | Pour Google Drive |
+| `DRIVE_WEBHOOK_SECRET` | Clé affichée par **Clients › Connecter Studio Site** dans le tableau Suivi clients | Pour Google Drive |
 
 ### Mise en ligne automatique
 
 Dans le dossier d'un client, une fois son modèle choisi, le bouton **Mettre en ligne** crée le dépôt privé `site-identifiant` dans l'organisation GitHub, crée le projet Vercel relié, dépose le site (sans `LISEZ-MOI.txt`) et suit Vercel jusqu'à « Ready ». Le bouton **Ajouter dans Vercel** relie ensuite le domaine du client (avec et sans www) et affiche les valeurs DNS à saisir chez OVHcloud.
 
 Garde-fous : coupée tant qu'elle n'est pas activée dans **Réglages** ; publication bloquée s'il reste des crochets dans les mentions légales ; jamais d'écriture dans un dépôt qui n'a pas été créé pour ce dossier ; confirmation demandée si le dépôt a été modifié à la main sur GitHub depuis la dernière publication. Chaque étape est notée dans l'historique du dossier.
+
+### Google Drive
+
+Avec `DRIVE_WEBHOOK_URL` et `DRIVE_WEBHOOK_SECRET`, Studio Site range lui-même chaque dossier dans le Drive de l'agence, côté serveur et sans faire attendre personne : la ligne du tableau Suivi clients et la fiche brief (à la réception du questionnaire, puis à chaque génération si les réponses ont changé), les photos et le logo du client (`2-Photos et logo`), et le site en .zip (`3-Versions du site`) à chaque mise en ligne depuis le dossier, s'il a changé. Le bloc **Google Drive** du dossier montre ce qui est rangé, le lien du dossier, et renvoie ce qui manque après un échec. Rien ne part vers Drive depuis l'espace client. L'ancienne route publique `/api/drive` est fermée.
+
+### Espace client
+
+Chaque site livré a son espace, ouvert depuis le dossier du client (bloc **Espace client**) :
+
+- **Ce que le client modifie** : horaires, fermetures exceptionnelles (bandeau affiché 3 semaines avant), coordonnées, services ou carte (prix, offre datée, indisponible), boutique (rupture de stock, offre datée), annonces et fêtes (Noël, Halloween, Pâques… allumées et éteintes toutes seules, chaque année), réponses de la FAQ liées aux horaires, photos. L'aperçu se met à jour pendant la saisie, page par page, à la date de son choix.
+- **Toujours cohérent avec son modèle** : le client ne change que des valeurs ; le site est reconstruit par le moteur avec les blocs du modèle choisi, puis publié par la mise en ligne automatique. Les contenus datés (offres, bandeaux) basculent seuls grâce au petit script du site, sans republier.
+- **Accès** : lien personnel à usage unique (7 jours) dans le message de livraison ; le client clique « Ouvrir mon espace » et son appareil reste reconnu (cookie HttpOnly, Secure, SameSite=Strict, limité à `/api/espace/<dossier>`). Lien de 15 minutes pour un autre appareil, ou par e-mail si Brevo est branché. Seule l'empreinte des liens est enregistrée ; chaque appareil se retire séparément ; **Couper l'accès du client** déconnecte tout.
+- **Qui fait les mises à jour** : le client choisit « Je m'en occupe », « À deux » ou « Mon prestataire s'en occupe », avec, s'il le veut, la validation de chaque publication de l'agence. L'agence ouvre l'espace en **vue agence**.
+- **Garde-fous** : contrôles refaits côté serveur, photos vérifiées sur leur contenu réel (JPEG, PNG, WebP), fusion avec les changements faits entre-temps, historique des versions avec retour en arrière, 20 publications par jour au plus. Si la mise en ligne automatique est coupée ou que le dépôt GitHub a été modifié à la main, les changements restent enregistrés et partent avec « Publier une nouvelle version ».
+- **Demandes** : page en plus, nouveau style… le client écrit, l'agence répond par un devis (ou « inclus dans l'entretien »), le client l'accepte dans son espace (accord daté).
+
+Un site qui a un espace client se modifie depuis Studio Site (dossier ou vue agence), plus à la main dans GitHub : une modification faite directement dans le dépôt serait remplacée à la publication suivante.
 
 Chaque génération complète fait 3 appels à l'API Claude, plus 0 à 8 images Gemini selon le nombre de photos fournies. Les coûts dépendent des modèles choisis : consultez les grilles tarifaires (platform.claude.com, ai.google.dev/pricing) et fixez une limite de dépenses dans chaque console.
 
@@ -86,7 +109,9 @@ app/                      Pages Next.js et routes API
   agence/reglages         Nom affiché, prénom, contact, hébergeur des mentions légales
   questionnaire/[id]      Questionnaire du client (lien privé)
   propositions/[id]       Sélection de modèles et choix du client (lien privé)
-  api/agence/…            Dossiers, images et réglages (réservé à l'agence)
+  espace/[id]             Espace client : modifications du site en ligne (lien personnel, puis appareil reconnu)
+  api/agence/…            Dossiers, images, réglages, mise en ligne et espace client (réservé à l'agence)
+  api/espace/[id]         Espace client : lecture, publication, demandes, appareils ; …/images pour les photos
   api/q/[id], api/p/[id]  Questionnaire et propositions (lien privé du client)
   api/files/[id]/[img]    Photos, logo et images IA d'un dossier
   api/generate            Appel à l'API Claude (la clé reste côté serveur)
@@ -107,6 +132,11 @@ src/ai/generate.js        Orchestration des 3 appels
 src/ai/images.js          Photos du client (redimensionnement) et images Gemini
   records.js              Étapes d'un dossier, images et brief prêts pour le rendu
 src/server/store.js       Stockage (Vercel Blob privé, lecture cohérente, écriture conditionnelle ; .data/ en local)
+src/server/publish.js     Mise en ligne automatique (GitHub + Vercel)
+src/server/espace.js      Espace client : liens, appareils, versions, publication
+src/server/mail.js        E-mails par Brevo (facultatif)
+src/server/drive.js       Rangement dans Google Drive : fiche brief, photos, .zip des versions (facultatif)
+src/engine/espace.js      Ce que le client peut modifier, contrôles, fusion, fêtes et annonces datées
 src/server/http.js        Accès agence, erreurs, nettoyage des réponses
 src/ui/                   Interface (questionnaire, galerie, aperçu)
 src/ui/agency/            Tableau de bord, dossier client, réglages
@@ -122,8 +152,8 @@ Ajoutez un objet dans `src/engine/archetypes.js` (polices Google Fonts, 2 palett
 
 - Les formulaires ouvrent la messagerie du visiteur ; pas encore d'envoi direct (service de formulaires à brancher).
 - Boutique : panier et commande par e-mail ; pas de paiement en ligne (Stripe à brancher en V2).
-- Pas d'hébergement automatique des sites générés : le .zip passe par GitHub et Vercel.
 - La limite de générations est en mémoire : suffisante pour un test, à remplacer par une base (ex. Vercel KV) en production.
 - Les mentions légales sont remplies avec les infos du questionnaire ; ce qui manque reste entre crochets.
-- L'application n'envoie ni e-mail ni SMS : elle prépare les messages, que l'agence envoie elle-même.
+- Sans Brevo, l'application n'envoie ni e-mail ni SMS : elle prépare les messages, que l'agence envoie elle-même. Avec Brevo, elle envoie les accès de l'espace client et ses notifications.
+- L'espace client s'ouvre sur l'adresse de Studio Site, pas sur le domaine du client.
 - Les images IA sont des illustrations d'ambiance : elles ne doivent pas présenter de faux produits, lieux ou personnes comme réels.
