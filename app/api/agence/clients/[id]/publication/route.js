@@ -49,13 +49,14 @@ export const POST = route(
       }
 
       case 'fichiers': {
-        const { patch, inchange } = await etapeFichiers(rec, { remplacer: body.remplacer === true });
+        const { patch, inchange, manques = [] } = await etapeFichiers(rec, { remplacer: body.remplacer === true });
         if (inchange) return ok({ client: rec, inchange: true, publication: vuePublication(rec.publication) });
+        const incomplet = manques.length ? ` (mentions légales incomplètes : ${manques.join(', ')})` : '';
         const client = await enregistrer(id, patch, {
-          log: patch.version === 1 ? 'Site v1 déposé sur GitHub, mise en ligne lancée' : `Nouvelle version v${patch.version} déposée sur GitHub`,
-          // Les mentions légales ont été contrôlées : plus aucun crochet
+          log: (patch.version === 1 ? 'Site v1 déposé sur GitHub, mise en ligne lancée' : `Nouvelle version v${patch.version} déposée sur GitHub`) + incomplet,
           extra: (r) => {
-            r.checks = { ...(r.checks || {}), legal: true };
+            // La case « mentions légales » de la mise en service ne se coche que si plus aucun crochet
+            if (!manques.length) r.checks = { ...(r.checks || {}), legal: true };
             // Les changements de l'espace client en attente partent avec cette version
             if (r.espace?.aPublier) r.espace = { ...r.espace, aPublier: null };
           },

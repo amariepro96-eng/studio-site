@@ -156,8 +156,9 @@ export default function Publication({ rec, onRecord, onEditBrief }) {
   }
 
   const legal = verif.manques || [];
+  // Les mentions légales incomplètes ne sont qu'un avertissement : seuls les autres points bloquent
   const autres = (verif.bloquants || []).filter((b) => !b.startsWith('Mentions légales'));
-  const bloque = (verif.bloquants || []).length > 0;
+  const bloque = autres.length > 0;
   const repoVu = verif.identifiantFixe ? verif.repo : `${st.org}/site-${slug(ident) || '…'}`;
   const enCours = pub?.commit && pub.deployState && pub.deployState !== 'READY' && !FIN.includes(pub.deployState);
   const chg = verif.changementsGitHub;
@@ -210,8 +211,8 @@ export default function Publication({ rec, onRecord, onEditBrief }) {
             </p>
           </div>
           <ul className="pub-checks">
-            <li className={legal.length ? 'is-ko' : 'is-ok'}>
-              <span>{legal.length ? `Mentions légales à compléter : ${legal.join(', ')}` : 'Mentions légales complètes'}</span>
+            <li className={legal.length ? 'is-warn' : 'is-ok'}>
+              <span>{legal.length ? `Mentions légales incomplètes : ${legal.join(', ')}. La mise en ligne reste possible ; complète-les avant de livrer le site au client.` : 'Mentions légales complètes'}</span>
             </li>
             <li className="is-ok">
               <span>
@@ -249,7 +250,19 @@ export default function Publication({ rec, onRecord, onEditBrief }) {
               {chg.dernier ? `, le dernier le ${fmt(chg.dernier.date)} (« ${chg.dernier.message} »)` : ''}. Une nouvelle version les remplacera. Ils restent visibles dans l’historique GitHub.
             </p>
           )}
-          {legal.length > 0 && <p className="q-error">Mentions légales à compléter : {legal.join(', ')}.</p>}
+          {legal.length > 0 && (
+            <p className="alert soft small">
+              Mentions légales incomplètes : {legal.join(', ')}. La publication reste possible ; complète-les avant de livrer le site au client.
+              {onEditBrief && (
+                <>
+                  {' '}
+                  <button type="button" className="btn-text small" onClick={onEditBrief}>
+                    Compléter le brief
+                  </button>
+                </>
+              )}
+            </p>
+          )}
           <button type="button" className={`btn block ${arme ? 'danger-solid' : 'secondary'}`} disabled={bloque || checking} onClick={() => (arme ? run({ remplacer: true }) : setArme(true))}>
             {arme ? 'Confirmer : remplacer le site en ligne' : 'Publier une nouvelle version'}
           </button>

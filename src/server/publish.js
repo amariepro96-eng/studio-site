@@ -260,7 +260,7 @@ export async function verifier(rec, { identifiant } = {}) {
     publication: vuePublication(pub),
     domaine: pub?.domain || rec.brief?.domain || '',
   };
-  if (manques.length) out.bloquants.push(`Mentions légales à compléter : ${manques.join(', ')}.`);
+  // Mentions légales incomplètes : simple avertissement (out.manques), la mise en ligne reste possible
   if (!fixe && !identifiantValide(id)) out.bloquants.push('Identifiant invalide : lettres minuscules, chiffres et tirets uniquement.');
   if (!status.configured || !status.enabled) return out;
 
@@ -335,8 +335,9 @@ export async function etapeFichiers(rec, { remplacer = false } = {}) {
   const pub = rec.publication || {};
   if (!pub.repo || !pub.projectId) throw new StoreError('Crée d’abord le dépôt et le projet Vercel.', 'not_ready', 409);
   const settings = await getSettings();
+  // Les passages entre crochets (mentions légales incomplètes) ne bloquent pas : ils sont
+  // renvoyés dans `manques` pour l'avertissement et l'historique du dossier
   const { pages, binaries, manques } = await siteFiles(rec, settings);
-  if (manques.length) throw new StoreError(`Mentions légales à compléter avant la mise en ligne : ${manques.join(', ')}.`, 'legal_missing', 409);
   const branch = pub.branch || 'main';
   const head = await teteDuDepot(pub.repo, branch);
   if (pub.commit && head !== pub.commit && !remplacer) {
@@ -354,14 +355,14 @@ export async function etapeFichiers(rec, { remplacer = false } = {}) {
   if (!tree.ok) throw ghFail(tree, 'préparation de la version');
   const current = await gh(`/repos/${pub.repo}/git/commits/${head}`);
   if (!current.ok) throw ghFail(current, 'lecture de la version en ligne');
-  if (current.data?.tree?.sha === tree.data.sha) return { patch: {}, inchange: true };
+  if (current.data?.tree?.sha === tree.data.sha) return { patch: {}, inchange: true, manques };
   const version = (pub.version || 0) + 1;
   const commit = await gh(`/repos/${pub.repo}/git/commits`, { method: 'POST', body: { message: `Site v${version} publié depuis Studio Site`, tree: tree.data.sha, parents: [head] } });
   if (!commit.ok) throw ghFail(commit, 'enregistrement de la version');
   const ref = await gh(`/repos/${pub.repo}/git/refs/heads/${encodeURIComponent(branch)}`, { method: 'PATCH', body: { sha: commit.data.sha, force: false } });
   if (ref.status === 422) throw new StoreError('Le dépôt a changé pendant la publication. Réessaie.', 'github_race', 409);
   if (!ref.ok) throw ghFail(ref, 'publication de la version');
-  return { patch: { commit: commit.data.sha, version, publishedAt: new Date().toISOString(), deployState: 'QUEUED', files: items.length }, inchange: false };
+  return { patch: { commit: commit.data.sha, version, publishedAt: new Date().toISOString(), deployState: 'QUEUED', files: items.length }, inchange: false, manques };
 }
 
 // ---------- Étape 4 : suivi de la mise en ligne ----------

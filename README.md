@@ -66,7 +66,7 @@ Sans stockage, l'espace agence affiche la marche à suivre ; seul l'Atelier libr
 
 Dans le dossier d'un client, une fois son modèle choisi, le bouton **Mettre en ligne** crée le dépôt privé `site-identifiant` dans l'organisation GitHub, crée le projet Vercel relié, dépose le site (sans `LISEZ-MOI.txt`) et suit Vercel jusqu'à « Ready ». Le bouton **Ajouter dans Vercel** relie ensuite le domaine du client (avec et sans www) et affiche les valeurs DNS à saisir chez OVHcloud.
 
-Garde-fous : coupée tant qu'elle n'est pas activée dans **Réglages** ; publication bloquée s'il reste des crochets dans les mentions légales ; jamais d'écriture dans un dépôt qui n'a pas été créé pour ce dossier ; confirmation demandée si le dépôt a été modifié à la main sur GitHub depuis la dernière publication. Chaque étape est notée dans l'historique du dossier.
+Garde-fous : coupée tant qu'elle n'est pas activée dans **Réglages** ; mentions légales incomplètes (passages entre crochets) signalées en avertissement, sans bloquer la publication, et notées dans l'historique du dossier ; jamais d'écriture dans un dépôt qui n'a pas été créé pour ce dossier ; confirmation demandée si le dépôt a été modifié à la main sur GitHub depuis la dernière publication. Chaque étape est notée dans l'historique du dossier.
 
 ### Google Drive
 

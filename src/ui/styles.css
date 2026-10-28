@@ -2342,6 +2342,13 @@ body {
 .pub-keys li.is-ko {
   color: var(--danger);
 }
+.pub-checks li.is-warn::before {
+  content: '!';
+  color: var(--warn);
+}
+.pub-checks li.is-warn {
+  color: var(--warn);
+}
 .pub-checks li.is-wait::before {
   content: '–';
   color: var(--muted);
