@@ -56,6 +56,8 @@ Sans stockage, l'espace agence affiche la marche à suivre ; seul l'Atelier libr
 | `GITHUB_PUBLISH_ORG` | Organisation GitHub des sites clients (défaut : `Station-Site`) | Non |
 | `VERCEL_PUBLISH_TOKEN` | Clé Vercel limitée à l'équipe Pro | Pour la mise en ligne automatique |
 | `VERCEL_TEAM_ID` | Identifiant de l'équipe Vercel, seulement si la clé en voit plusieurs | Non |
+| `OVH_APPLICATION_KEY`, `OVH_APPLICATION_SECRET`, `OVH_CONSUMER_KEY` | Clé API OVHcloud (droits GET, POST, PUT, DELETE sur `/domain/zone/*`) : Studio Site règle lui-même la zone DNS du client | Non (sinon, saisie à la main) |
+| `OVH_ENDPOINT` | Adresse de l'API OVHcloud (défaut : `https://eu.api.ovh.com/1.0`) | Non |
 | `BREVO_API_KEY` | Clé API Brevo : envoi des accès, des liens de connexion et des notifications de l'espace client | Non (sinon, messages à copier) |
 | `EMAIL_FROM` | Adresse d'expédition validée dans Brevo (ex. `contact@ton-domaine.fr`) | Avec Brevo |
 | `EMAIL_FROM_NAME` | Nom affiché comme expéditeur (défaut : le nom du studio dans Réglages) | Non |
@@ -65,6 +67,8 @@ Sans stockage, l'espace agence affiche la marche à suivre ; seul l'Atelier libr
 ### Mise en ligne automatique
 
 Dans le dossier d'un client, une fois son modèle choisi, le bouton **Mettre en ligne** crée le dépôt privé `site-identifiant` dans l'organisation GitHub, crée le projet Vercel relié, dépose le site (sans `LISEZ-MOI.txt`) et suit Vercel jusqu'à « Ready ». Le bouton **Ajouter dans Vercel** relie ensuite le domaine du client (avec et sans www) et affiche les valeurs DNS à saisir chez OVHcloud.
+
+Avec la clé API OVHcloud, le bloc **Zone DNS chez OVHcloud** compare la zone du client aux valeurs que Vercel recommande pour ce projet (à l'ajout du domaine et à chaque **Vérifier**), affiche les changements, puis **Régler chez OVHcloud** les applique : entrée A du domaine seul, suppression de son AAAA, un seul CNAME sur `www` (les autres entrées de `www` sont retirées), TXT de vérification Vercel si besoin, puis publication de la zone. Les entrées MX, NS, SPF, DKIM, SRV et les autres sous-domaines ne sont jamais touchées.
 
 Garde-fous : coupée tant qu'elle n'est pas activée dans **Réglages** ; mentions légales incomplètes (passages entre crochets) signalées en avertissement, sans bloquer la publication, et notées dans l'historique du dossier ; jamais d'écriture dans un dépôt qui n'a pas été créé pour ce dossier ; confirmation demandée si le dépôt a été modifié à la main sur GitHub depuis la dernière publication. Chaque étape est notée dans l'historique du dossier.
 

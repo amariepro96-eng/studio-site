@@ -4,7 +4,8 @@ import { after } from 'next/server';
 import { route, ok, fail, readBody, memeOrigine } from '../../../../../../src/server/http.js';
 import { getClient, updateClient } from '../../../../../../src/server/store.js';
 import { rateLimited, clientIp } from '../../../../../../src/server/config.js';
-import { verifier, etapeDepot, etapeVercel, etapeFichiers, etapeEtat, etapeDomaine, etapeVerifierDomaine, vuePublication } from '../../../../../../src/server/publish.js';
+import { verifier, etapeDepot, etapeVercel, etapeFichiers, etapeEtat, etapeDomaine, etapeVerifierDomaine, etapeDnsOvh, vuePublication } from '../../../../../../src/server/publish.js';
+import { libelle } from '../../../../../../src/server/ovh.js';
 import { driveStatus, envoyerVersDrive } from '../../../../../../src/server/drive.js';
 
 export const runtime = 'nodejs';
@@ -93,6 +94,34 @@ export const POST = route(
           },
         });
         return ok({ client, publication: vuePublication(client.publication) });
+      }
+
+      // Zone DNS chez OVHcloud : ce qu'il faudrait changer (aucune écriture)
+      case 'dnsOvh': {
+        const res = await etapeDnsOvh(rec);
+        return ok({ zone: res.zone, actions: res.actions.map((a) => ({ ...a, texte: libelle(a) })) });
+      }
+
+      // Zone DNS chez OVHcloud : applique les changements, puis revérifie dans Vercel
+      case 'dnsOvhAppliquer': {
+        const res = await etapeDnsOvh(rec, { appliquer: true });
+        let client = rec;
+        if (res.applique) {
+          client = await enregistrer(id, {}, { log: `Zone DNS réglée chez OVHcloud (${res.zone}) : ${res.actions.map(libelle).join(' ; ')}`.slice(0, 200) });
+          // OVHcloud publie la zone en quelques secondes ; Vercel peut mettre un peu plus à le voir
+          try {
+            const patch = await etapeVerifierDomaine(client);
+            client = await enregistrer(id, patch, {
+              log: patch.domainOk && !client.publication?.domainOk ? `Domaine valide : ${res.zone}` : '',
+              extra: (r) => {
+                if (!patch.domainOk) return;
+                if (!r.liveUrl) r.liveUrl = 'https://' + r.publication.domain;
+                r.checks = { ...(r.checks || {}), publish: true };
+              },
+            });
+          } catch {}
+        }
+        return ok({ client, publication: vuePublication(client.publication), zone: res.zone, actions: res.actions.map((a) => ({ ...a, texte: libelle(a) })), applique: res.applique });
       }
 
       default:

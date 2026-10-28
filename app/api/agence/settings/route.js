@@ -3,9 +3,10 @@ import { getSettings, saveSettings } from '../../../../src/server/store.js';
 import { publishStatus } from '../../../../src/server/publish.js';
 import { driveStatus } from '../../../../src/server/drive.js';
 import { mailStatus } from '../../../../src/server/mail.js';
+import { ovhStatus } from '../../../../src/server/ovh.js';
 
 // Services branchés par des variables Vercel (jamais les clés elles-mêmes)
-const services = () => ({ drive: driveStatus(), mail: mailStatus() });
+const services = () => ({ drive: driveStatus(), mail: mailStatus(), ovh: ovhStatus() });
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

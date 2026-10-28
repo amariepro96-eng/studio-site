@@ -2437,6 +2437,26 @@ body {
   padding-top: 12px;
   border-top: 1px dashed var(--line);
 }
+/* Zone DNS chez OVHcloud, sous le domaine */
+.pub-ovh {
+  display: grid;
+  gap: 8px;
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+  justify-items: start;
+}
+.pub-ovh > .pub-checks,
+.pub-ovh > p,
+.pub-ovh > .btn.block {
+  justify-self: stretch;
+  margin: 0;
+}
+.pub-ovh h4 {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--ink);
+}
 .pub-domain h4 {
   margin: 0;
   font-size: 0.95rem;

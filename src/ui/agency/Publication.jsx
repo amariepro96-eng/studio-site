@@ -295,16 +295,59 @@ export default function Publication({ rec, onRecord, onEditBrief }) {
         </p>
       )}
 
-      {pub?.deployState === 'READY' && <Domaine key={pub.domain || 'nouveau'} pub={pub} initial={verif.domaine} call={call} onRecord={onRecord} />}
+      {pub?.deployState === 'READY' && <Domaine key={pub.domain || 'nouveau'} pub={pub} initial={verif.domaine} ovh={verif.ovh} call={call} onRecord={onRecord} />}
     </div>
   );
 }
 
-function Domaine({ pub, initial, call, onRecord }) {
+function Domaine({ pub, initial, ovh, call, onRecord }) {
   const [val, setVal] = useState(pub.domain || initial || '');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [copied, setCopied] = useState('');
+  // Zone DNS chez OVHcloud : changements proposés, puis appliqués après ton clic
+  const [plan, setPlan] = useState(null);
+  const [planBusy, setPlanBusy] = useState(false);
+  const [planErr, setPlanErr] = useState('');
+  const [fait, setFait] = useState('');
+  const ovhPret = Boolean(ovh?.configured);
+
+  async function preparer() {
+    if (!ovhPret || !pub.domain) return;
+    setPlanBusy(true);
+    setPlanErr('');
+    setFait('');
+    try {
+      const res = await call('dnsOvh');
+      setPlan({ zone: res.zone, actions: res.actions || [] });
+    } catch (e) {
+      setPlanErr(e.message);
+    } finally {
+      setPlanBusy(false);
+    }
+  }
+
+  async function appliquer() {
+    setPlanBusy(true);
+    setPlanErr('');
+    try {
+      const res = await call('dnsOvhAppliquer');
+      if (res.client) onRecord(res.client);
+      const n = (res.actions || []).length;
+      setFait(res.applique ? `${n} changement${n > 1 ? 's' : ''} fait${n > 1 ? 's' : ''} chez OVHcloud. Compte quelques minutes, puis « Vérifier ».` : 'Rien à changer : la zone OVHcloud est déjà à jour.');
+      setPlan({ zone: res.zone, actions: [] });
+    } catch (e) {
+      setPlanErr(e.message);
+    } finally {
+      setPlanBusy(false);
+    }
+  }
+
+  // Domaine en attente : Studio Site lit tout de suite la zone OVHcloud et propose le réglage
+  useEffect(() => {
+    if (pub.domain && ovhPret && !pub.domainOk) preparer();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function go(etape) {
     setBusy(true);
@@ -312,6 +355,8 @@ function Domaine({ pub, initial, call, onRecord }) {
     try {
       const res = await call(etape, etape === 'domaine' ? { domaine: val } : {});
       if (res.client) onRecord(res.client);
+      // À chaque vérification, on compare aussi la zone OVHcloud aux valeurs actuelles de Vercel
+      if (etape === 'verifierDomaine') await preparer();
     } catch (e) {
       setErr(e.message);
     } finally {
@@ -349,7 +394,12 @@ function Domaine({ pub, initial, call, onRecord }) {
       <h4>
         {pub.domain} <span className={`tag ${pub.domainOk ? 'ok' : 'wait'}`}>{pub.domainOk ? 'Actif' : 'En attente des réglages DNS'}</span>
       </h4>
-      {!pub.domainOk && <p className="muted small">À saisir dans la zone DNS OVHcloud du client (document 14, §D). Ne touche pas aux lignes MX, TXT et NS déjà présentes.</p>}
+      {!pub.domainOk &&
+        (ovhPret ? (
+          <p className="muted small">Studio Site peut les saisir lui-même dans la zone DNS OVHcloud du client : vois le réglage proposé ci-dessous.</p>
+        ) : (
+          <p className="muted small">À saisir dans la zone DNS OVHcloud du client (document 14, §D). Ne touche pas aux lignes MX, TXT et NS déjà présentes.</p>
+        ))}
       <ul className="dns">
         {(pub.dns || []).map((r) => (
           <li key={r.type + r.nom + r.valeur}>
@@ -378,6 +428,44 @@ function Domaine({ pub, initial, call, onRecord }) {
         <p className="q-error" role="alert">
           {err}
         </p>
+      )}
+
+      {ovhPret ? (
+        <div className="pub-ovh">
+          <h4>Zone DNS chez OVHcloud</h4>
+          {planBusy && <p className="muted small">{plan?.actions?.length ? 'Réglage chez OVHcloud…' : 'Lecture de la zone chez OVHcloud…'}</p>}
+          {!planBusy && plan && plan.actions.length === 0 && !fait && <p className="side-note">Zone OVHcloud à jour : elle contient exactement les valeurs actuelles de Vercel.</p>}
+          {plan && plan.actions.length > 0 && (
+            <>
+              <p className="small">
+                Changements à faire dans la zone <code>{plan.zone}</code>. Seules les entrées du domaine seul (A, AAAA) et de <code>www</code> sont touchées : les e-mails et les autres lignes ne bougent pas.
+              </p>
+              <ul className="pub-checks">
+                {plan.actions.map((a, i) => (
+                  <li key={i} className="is-warn">
+                    <span>{a.texte}</span>
+                  </li>
+                ))}
+              </ul>
+              <button type="button" className="btn primary block" disabled={planBusy} onClick={appliquer}>
+                {planBusy ? 'Réglage…' : 'Régler chez OVHcloud'}
+              </button>
+            </>
+          )}
+          {!plan && !planBusy && (
+            <button type="button" className="btn secondary small" onClick={preparer}>
+              Contrôler la zone OVHcloud
+            </button>
+          )}
+          {fait && <p className="side-note">{fait}</p>}
+          {planErr && (
+            <p className="q-error" role="alert">
+              {planErr}
+            </p>
+          )}
+        </div>
+      ) : (
+        !pub.domainOk && <p className="muted small">Pour que Studio Site règle lui-même la zone DNS OVHcloud, ajoute sa clé API dans Vercel (document 14, §F).</p>
       )}
     </div>
   );

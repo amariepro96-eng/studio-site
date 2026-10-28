@@ -124,8 +124,9 @@ function Services({ services }) {
       <ul className="pub-checks">
         {ligne(services.drive, 'Google Drive', 'fiche brief, photos et versions rangées dans le dossier du client')}
         {ligne(services.mail, 'E-mails de l’espace client (Brevo)', `envoyés depuis ${services.mail.from}`)}
+        {services.ovh && ligne(services.ovh, 'Zone DNS OVHcloud', 'Studio Site règle les entrées A et www du domaine de tes clients, après ton clic')}
       </ul>
-      <p className="q-hint">Facultatifs. Sans Google Drive, rien n’arrive tout seul dans le tableau Suivi clients ; sans Brevo, tu copies toi-même les messages de l’espace client (document 13, §J).</p>
+      <p className="q-hint">Facultatifs. Sans Google Drive, rien n’arrive tout seul dans le tableau Suivi clients ; sans Brevo, tu copies toi-même les messages de l’espace client ; sans la clé OVHcloud, tu saisis toi-même les entrées DNS (documents 13, §J et 14, §F).</p>
     </div>
   );
 }

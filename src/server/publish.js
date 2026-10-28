@@ -16,6 +16,7 @@
 import { renderPage, allPageSlugs } from '../engine/render.js';
 import { renderImages, renderBrief } from '../engine/records.js';
 import { readImage, getSettings, StoreError } from './store.js';
+import { ovhStatus, lireZone, planDns, appliquerDns } from './ovh.js';
 
 const GH = 'https://api.github.com';
 const VC = 'https://api.vercel.com';
@@ -249,6 +250,7 @@ export async function verifier(rec, { identifiant } = {}) {
   const { pages, binaries, manques } = await siteFiles(rec, settings);
   const out = {
     status,
+    ovh: ovhStatus(),
     identifiant: id,
     identifiantFixe: fixe,
     repo: fixe ? pub.repo : `${env.org}/site-${id}`,
@@ -474,4 +476,28 @@ export async function etapeVerifierDomaine(rec) {
   }
   const dns = await reglagesDns(pub, teamId, pub.domain);
   return { dns: dns.records, domainOk: dns.ok, domainCheckedAt: new Date().toISOString() };
+}
+
+// ---------- Étape 6 : la zone DNS chez OVHcloud ----------
+// Compare la zone du client aux valeurs que Vercel recommande aujourd'hui pour ce projet
+// (même si l'ancienne valeur « marche encore »), puis, sur demande, l'aligne.
+export async function etapeDnsOvh(rec, { appliquer = false } = {}) {
+  await assertActive();
+  const pub = rec.publication || {};
+  if (!pub.domain || !pub.projectId) throw new StoreError('Ajoute d’abord le domaine dans Vercel.', 'no_domain', 409);
+  const st = ovhStatus();
+  if (!st.configured) throw new StoreError(`Réglage OVHcloud pas branché : il manque ${st.missing.join(', ')} dans Vercel (document 14, §F).`, 'ovh_off', 503);
+  const teamId = pub.teamId || (await equipe());
+  const voulu = await reglagesDns(pub, teamId, pub.domain);
+  const val = (type) => voulu.records.find((r) => r.type === type)?.valeur || '';
+  const cible = {
+    ip: val('A'),
+    cname: val('CNAME'),
+    txt: voulu.records.filter((r) => r.type === 'TXT').map((r) => ({ nom: r.nom, valeur: r.valeur })),
+  };
+  if (!cible.ip || !cible.cname) throw new StoreError('Vercel n’a pas donné les valeurs DNS du domaine. Clique sur « Vérifier », puis réessaie.', 'dns_unknown', 409);
+  const actions = planDns(await lireZone(pub.domain), cible);
+  if (!appliquer || !actions.length) return { zone: pub.domain, actions, applique: false };
+  await appliquerDns(pub.domain, actions);
+  return { zone: pub.domain, actions, applique: true };
 }
