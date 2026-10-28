@@ -1,0 +1,64 @@
+MISE À JOUR STUDIO SITE : espace client livré avec le site + Google Drive branché
+
+Cette mise à jour remplace celle envoyée juste avant (maj-espace-client.zip) : elle contient
+tout ce qu'elle avait, plus le rangement automatique dans Google Drive. Si tu as déjà déposé
+l'ancienne, dépose quand même celle-ci par-dessus : rien ne sera perdu.
+
+
+CE QUE ÇA AJOUTE
+- Espace client : dans le dossier d'un client (modèle choisi), le bloc « Espace client »
+  prépare le message de livraison avec son lien personnel (une seule fois, 7 jours). Le client
+  modifie ensuite lui-même horaires, fermetures, prix et offres, ruptures, fêtes et photos, puis
+  publie : son site se met à jour en 1 minute environ.
+- Google Drive : jusqu'ici, Studio Site n'envoyait RIEN dans ton Drive (le branchement manquait
+  dans le code). Désormais, la ligne du tableau Suivi clients, la fiche brief et les photos
+  arrivent dès que le client envoie son questionnaire, et le .zip de chaque version mise en
+  ligne part dans « 3-Versions du site ». Un bloc « Google Drive » dans chaque dossier montre
+  ce qui est rangé.
+- Réglages : une rubrique « Services branchés » (Google Drive, e-mails Brevo).
+
+
+INSTALLER (5 minutes)
+1. Dans le dossier studio-site-github, sélectionne TOUT (Ctrl + A : les dossiers app et src,
+   les fichiers README.md et next.config.mjs).
+2. Sur github.com, ouvre ton dépôt studio-site (ton compte personnel, PAS l'organisation
+   Station-Site) > Add file > Upload files.
+3. Glisse la sélection dans la zone, attends que les 36 fichiers soient listés, écris
+   « Mise à jour espace client et Drive », puis Commit changes.
+4. Vercel met l'application à jour en 1 à 2 minutes (projet de Studio Site > Deployments :
+   point vert « Ready »).
+Aucune nouvelle clé n'est nécessaire.
+
+
+VÉRIFIER (2 minutes)
+1. Ouvre l'adresse de Studio Site suivie de /api/status : tu dois lire "drive":true.
+   Si tu lis "drive":false : dans Vercel, ajoute DRIVE_WEBHOOK_URL et DRIVE_WEBHOOK_SECRET
+   (tableau Suivi clients > menu Clients > Connecter Studio Site), puis Redeploy.
+2. /agence > Réglages : « Mise en ligne automatique » (2 clés présentes, case cochée) et
+   « Services branchés » (Google Drive branché).
+
+
+ESSAYER SUR TOI D'ABORD (15 minutes)
+1. Crée un dossier test à ton nom, avec TON e-mail. Ouvre le lien du questionnaire,
+   remplis-le avec une photo, clique « Envoyer mes réponses ».
+2. Une minute après : ta ligne est dans Suivi clients, et le bloc « Google Drive » du dossier
+   affiche « Fiche brief du … » et la photo rangée.
+3. Génère, choisis un modèle, complète les mentions légales, puis « Mettre en ligne ».
+   Le .zip apparaît dans « 3-Versions du site » de ton dossier Drive.
+4. Bloc « Espace client » : laisse ton e-mail, « Je m'en occupe »,
+   « Préparer le message de livraison ». Envoie-toi le message et ouvre le lien sur ton
+   téléphone : « Ouvrir mon espace ».
+5. Change un horaire, ajoute la fête de Noël, puis « Publier ». Vérifie le site test 1 minute après.
+6. Dans « Mon accès », essaie « Créer le lien » pour ouvrir l'espace sur ton ordinateur.
+
+
+IMPORTANT
+- Un site qui a un espace client se modifie depuis Studio Site (son espace, la vue agence ou
+  son dossier), JAMAIS à la main dans GitHub : une modification faite dans le dépôt bloquerait
+  les publications du client et serait remplacée à la publication suivante.
+- N'ouvre jamais toi-même le lien personnel d'un client : il ne sert qu'une fois. Pour voir
+  son espace, utilise « Ouvrir l'espace (vue agence) ».
+- Les documents du Projet « APP IA » (00 à 17) décrivent tout ça pas à pas ; le nouveau
+  document 17 explique Brevo (facultatif) pour que l'application envoie elle-même les e-mails.
+- Le dossier maj-studio-site qui traîne dans ton dépôt studio-site (ancienne mise à jour) ne
+  sert à rien : tu peux le supprimer (ouvre-le > ⋯ en haut à droite > Delete directory).
