@@ -3,6 +3,9 @@ import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { AgencyBar, Spinner } from '../Chrome.jsx';
 import { StorageSetup } from './Dashboard.jsx';
+import Securite from './Securite.jsx';
+import Alertes from './Alertes.jsx';
+import { lireEuros, versSaisie, euros, nouvelId } from '../../engine/finances.js';
 
 const FIELDS = [
   { id: 'studioName', label: 'Nom affiché aux clients', hint: 'En haut du questionnaire et de la page de propositions.' },
@@ -20,10 +23,12 @@ export default function Settings({ studioName }) {
   const [storage, setStorage] = useState(null);
   const [pub, setPub] = useState(null);
   const [services, setServices] = useState(null);
+  const [emailEnregistre, setEmailEnregistre] = useState('');
   useEffect(() => {
     api('/api/agence/settings')
       .then((d) => {
         setS(d.settings);
+        setEmailEnregistre(d.settings?.email || '');
         setPub(d.publication || null);
         setServices(d.services || null);
       })
@@ -40,6 +45,7 @@ export default function Settings({ studioName }) {
     try {
       const d = await api('/api/agence/settings', { method: 'PUT', body: { settings: s } });
       setS(d.settings);
+      setEmailEnregistre(d.settings?.email || '');
       setPub(d.publication || null);
       setServices(d.services || null);
       setNote('Réglages enregistrés.');
@@ -81,8 +87,10 @@ export default function Settings({ studioName }) {
                 )}
               </div>
             ))}
+            <Charges value={s.charges || []} onChange={(charges) => setS({ ...s, charges })} />
             {pub && <PublishSettings pub={pub} value={!!s.autoPublish} onChange={(v) => setS({ ...s, autoPublish: v })} />}
             {services && <Services services={services} />}
+            <Alertes value={s.alertesEmail !== false} onChange={(v) => setS({ ...s, alertesEmail: v })} emailEnregistre={/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(emailEnregistre.trim()) ? emailEnregistre.trim() : ''} />
             <div className="form-actions">
               <button type="submit" className="btn primary" disabled={busy}>
                 {busy ? 'Enregistrement…' : 'Enregistrer'}
@@ -95,6 +103,7 @@ export default function Settings({ studioName }) {
             </div>
           </form>
         )}
+        {s && storage !== 'none' && <Securite />}
       </main>
     </div>
   );
@@ -160,6 +169,55 @@ function PublishSettings({ pub, value, onChange }) {
           <span className="q-option-hint">Décoche puis enregistre pour tout couper d’un coup : plus aucun dossier ne peut publier.</span>
         </span>
       </label>
+    </div>
+  );
+}
+
+// Charges mensuelles de l'agence : déduites des abonnements dans le suivi financier
+const EXEMPLES = ['Vercel Pro', 'Abonnement Claude', 'Images Gemini', 'Brevo', 'Google Workspace'];
+function Charges({ value, onChange }) {
+  const [lignes, setLignes] = useState(() => value.map((c) => ({ id: c.id, libelle: c.libelle, saisie: versSaisie(c.montant) })));
+  const [erreurs, setErreurs] = useState({});
+  function maj(next) {
+    setLignes(next);
+    const errs = {};
+    const out = [];
+    for (const l of next) {
+      const m = lireEuros(l.saisie);
+      if (m === null) errs[l.id] = true;
+      if (l.libelle.trim()) out.push({ id: l.id, libelle: l.libelle, montant: m ?? 0 });
+    }
+    setErreurs(errs);
+    onChange(out);
+  }
+  const total = value.reduce((t, c) => t + (c.montant || 0), 0);
+  return (
+    <div className="q-field charges">
+      <span className="q-label">Charges mensuelles de l’agence</span>
+      <p className="q-hint">Ce que l’activité te coûte chaque mois (hébergement, abonnements, outils). Le suivi financier les déduit des abonnements de tes clients pour estimer ta marge.</p>
+      {lignes.length > 0 && (
+        <ul className="charges-list">
+          {lignes.map((l, i) => (
+            <li key={l.id}>
+              <input type="text" aria-label="Libellé de la charge" placeholder={EXEMPLES[i % EXEMPLES.length]} value={l.libelle} onChange={(e) => maj(lignes.map((x) => (x.id === l.id ? { ...x, libelle: e.target.value } : x)))} />
+              <span className="euro-input">
+                <input type="text" inputMode="decimal" aria-label="Montant par mois en euros" placeholder="0" value={l.saisie} aria-invalid={erreurs[l.id] || undefined} onChange={(e) => maj(lignes.map((x) => (x.id === l.id ? { ...x, saisie: e.target.value } : x)))} />
+                <span aria-hidden="true">€/mois</span>
+              </span>
+              <button type="button" className="icon-btn small" aria-label={`Retirer ${l.libelle || 'cette charge'}`} onClick={() => maj(lignes.filter((x) => x.id !== l.id))}>
+                ×
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {Object.keys(erreurs).length > 0 && <p className="q-error">Montant illisible : écris par exemple 20 ou 19,90.</p>}
+      <div className="row-actions">
+        <button type="button" className="btn secondary small" onClick={() => maj([...lignes, { id: nouvelId(), libelle: '', saisie: '' }])}>
+          Ajouter une charge
+        </button>
+        {total > 0 && <span className="muted small">Total : {euros(total)} par mois</span>}
+      </div>
     </div>
   );
 }

@@ -33,6 +33,9 @@ export function nextAction(rec) {
   }
 }
 
+// Formules vendues (grille tarifaire)
+export const FORMULES = ['Essentiel', 'Pro', 'Boutique', 'Zéro apport'];
+
 export const MIN_PICK = 2;
 export const MAX_PICK = 5;
 

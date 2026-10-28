@@ -96,7 +96,7 @@ function ghFail(res, quoi) {
 }
 
 // ---------- Appels Vercel ----------
-async function vc(path, { method = 'GET', body, teamId } = {}) {
+export async function vc(path, { method = 'GET', body, teamId } = {}) {
   const { vercelToken } = publishEnv();
   const url = new URL(VC + path);
   if (teamId) url.searchParams.set('teamId', teamId);
@@ -129,7 +129,7 @@ function vcFail(res, quoi) {
 }
 
 let teamCache = '';
-async function equipe() {
+export async function equipe() {
   const { teamId } = publishEnv();
   if (teamId) return teamId;
   if (teamCache) return teamCache;

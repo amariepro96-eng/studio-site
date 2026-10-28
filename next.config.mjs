@@ -16,6 +16,11 @@ const nextConfig = {
       { source: '/espace/:path*', headers: PRIVE },
       { source: '/agence/:path*', headers: PRIVE },
       { source: '/agence', headers: PRIVE },
+      { source: '/pilotage/:path*', headers: PRIVE },
+      { source: '/pilotage', headers: PRIVE },
+      { source: '/api/agence/:path*', headers: [{ key: 'X-Content-Type-Options', value: 'nosniff' }, { key: 'Referrer-Policy', value: 'no-referrer' }, { key: 'Cache-Control', value: 'no-store' }] },
+      { source: '/api/agence-login', headers: [{ key: 'Cache-Control', value: 'no-store' }, { key: 'Referrer-Policy', value: 'no-referrer' }] },
+      { source: '/pilotage.webmanifest', headers: [{ key: 'Content-Type', value: 'application/manifest+json; charset=utf-8' }] },
       { source: '/api/espace/:path*', headers: [{ key: 'X-Content-Type-Options', value: 'nosniff' }, { key: 'Referrer-Policy', value: 'no-referrer' }] },
     ];
   },

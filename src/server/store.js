@@ -9,6 +9,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { nettoyerCharges } from '../engine/finances.js';
 
 export class StoreError extends Error {
   constructor(message, code, status = 500) {
@@ -86,6 +87,10 @@ async function writeRaw(pathname, body, { contentType, ifMatch, overwrite = true
   if (storageMode() === 'local') {
     const file = localPath(pathname);
     await fs.mkdir(path.dirname(file), { recursive: true });
+    if (!overwrite) {
+      const deja = await fs.stat(file).then(() => true, () => false);
+      if (deja) throw new Error('Ce fichier existe déjà.');
+    }
     if (ifMatch) {
       const cur = await readRaw(pathname);
       if (cur && cur.etag !== ifMatch) {
@@ -223,6 +228,48 @@ async function updateJsonOnce(pathname, fn) {
   throw new StoreError('Le dossier a été modifié en même temps ailleurs. Réessayez.', 'conflict', 409);
 }
 
+// Lecture-modification d'un fichier d'état, créé au premier besoin
+async function upsertJson(pathname, initial, fn) {
+  const out = await updateJson(pathname, fn);
+  if (out !== null) return out;
+  const first = (await fn(structuredClone(initial))) || initial;
+  try {
+    await writeRaw(pathname, JSON.stringify(first), { contentType: 'application/json', overwrite: false });
+    return first;
+  } catch (e) {
+    // Créé entre-temps par un autre appel : on repasse par la modification
+    const again = await updateJson(pathname, fn);
+    if (again !== null) return again;
+    throw e;
+  }
+}
+
+// ---------- Sécurité de l'espace agence (double authentification) ----------
+export const SECURITE_VIDE = { totp: null, secours: [], sv: 1, echecs: [] };
+
+export async function getSecurite() {
+  if (storageMode() === 'none') return null;
+  const cur = await readJson('securite.json');
+  return { ...SECURITE_VIDE, ...(cur?.data || {}) };
+}
+
+export function updateSecurite(fn) {
+  return upsertJson('securite.json', SECURITE_VIDE, (s) => fn({ ...SECURITE_VIDE, ...s }));
+}
+
+// ---------- Pilotage : ce qui a déjà été constaté (problèmes en cours, journal) ----------
+export const PILOTAGE_VIDE = { problemes: {}, journal: [], verifieLe: null };
+
+export async function getPilotage() {
+  if (storageMode() === 'none') return { ...PILOTAGE_VIDE };
+  const cur = await readJson('pilotage.json').catch(() => null);
+  return { ...PILOTAGE_VIDE, ...(cur?.data || {}) };
+}
+
+export function updatePilotage(fn) {
+  return upsertJson('pilotage.json', PILOTAGE_VIDE, (s) => fn({ ...PILOTAGE_VIDE, ...s }));
+}
+
 // ---------- Réglages de l'agence ----------
 export const DEFAULT_HOSTING = 'Vercel Inc., 340 S Lemon Ave #4133, Walnut, CA 91789, États-Unis — vercel.com';
 
@@ -234,6 +281,10 @@ export const DEFAULT_SETTINGS = {
   hosting: DEFAULT_HOSTING,
   // Mise en ligne automatique (GitHub + Vercel) : coupée tant que tu ne l'actives pas
   autoPublish: false,
+  // Charges mensuelles de l'agence (suivi financier) : [{ id, libelle, montant en centimes }]
+  charges: [],
+  // E-mail quand un site tombe en panne (surveillance automatique toutes les 5 minutes)
+  alertesEmail: true,
 };
 
 export async function getSettings() {
@@ -246,6 +297,8 @@ export async function saveSettings(input) {
   const s = { ...(await getSettings()) };
   for (const k of Object.keys(DEFAULT_SETTINGS)) if (typeof DEFAULT_SETTINGS[k] === 'string' && typeof input?.[k] === 'string') s[k] = input[k].slice(0, 300).trim();
   if (typeof input?.autoPublish === 'boolean') s.autoPublish = input.autoPublish;
+  if (typeof input?.alertesEmail === 'boolean') s.alertesEmail = input.alertesEmail;
+  if (Array.isArray(input?.charges)) s.charges = nettoyerCharges(input.charges);
   if (!s.studioName) s.studioName = DEFAULT_SETTINGS.studioName;
   if (!s.ownerName) s.ownerName = DEFAULT_SETTINGS.ownerName;
   await writeRaw('settings.json', JSON.stringify(s), { contentType: 'application/json' });

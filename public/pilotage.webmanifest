@@ -1,0 +1,18 @@
+{
+  "name": "Pilotage — Studio Site",
+  "short_name": "Pilotage",
+  "description": "État en direct des sites clients, fiches et suivi financier.",
+  "id": "/pilotage",
+  "start_url": "/pilotage",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f3f4f1",
+  "theme_color": "#f3f4f1",
+  "lang": "fr",
+  "icons": [
+    { "src": "/icons/pilotage-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/pilotage-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/pilotage-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

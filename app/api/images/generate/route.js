@@ -27,7 +27,7 @@ function extractImage(json) {
 }
 
 export async function POST(req) {
-  if (!isAgency(req)) return fail(401, 'Session agence expirée : reconnectez-vous.', 'unauthorized');
+  if (!(await isAgency(req))) return fail(401, 'Session agence expirée : reconnectez-vous.', 'unauthorized');
   const cfg = config();
   if (!cfg.geminiKey) return fail(503, 'La génération d’images n’est pas configurée (variable GEMINI_API_KEY).', 'no_key');
 

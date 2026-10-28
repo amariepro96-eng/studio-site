@@ -152,9 +152,9 @@ export function lireSession(req, rec) {
 }
 
 // Qui appelle : le client (appareil reconnu) ou l'agence (vue agence demandée explicitement)
-export function quiAppelle(req, rec) {
+export async function quiAppelle(req, rec) {
   const vueAgence = new URL(req.url).searchParams.get('vue') === 'agence';
-  if (vueAgence) return isAgency(req) ? { role: 'agence', appareil: null } : null;
+  if (vueAgence) return (await isAgency(req)) ? { role: 'agence', appareil: null } : null;
   const appareil = lireSession(req, rec);
   return appareil ? { role: 'client', appareil } : null;
 }

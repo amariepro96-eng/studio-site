@@ -646,6 +646,11 @@ export default function EspaceApp({ id, vueAgence = false }) {
               Retour au dossier
             </a>
           )}
+          {!client && (
+            <a className="btn-text small" href="/pilotage">
+              Pilotage
+            </a>
+          )}
         </div>
       </header>
 

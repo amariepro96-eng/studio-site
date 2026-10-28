@@ -13,7 +13,7 @@ export const POST = route(async (req, { id }) => {
   if (!memeOrigine(req)) return fail(403, 'Requête refusée.', 'origin');
   const rec = await getClient(id);
   if (!rec || !espaceActif(rec)) return fail(404, 'Cet espace n’existe pas ou a été fermé.', 'not_found');
-  const q = quiAppelle(req, rec);
+  const q = await quiAppelle(req, rec);
   if (!q) return fail(401, 'Votre session a expiré : reconnectez-vous.', 'connexion');
   if (!peutModifier(espaceDe(rec).gestion, q.role)) return fail(403, 'Vous ne pouvez pas modifier ce site pour le moment.', 'interdit');
   if (rateLimited('espace-img:' + id, 60)) return fail(429, 'Trop de photos envoyées en peu de temps. Réessayez dans une heure.', 'rate');

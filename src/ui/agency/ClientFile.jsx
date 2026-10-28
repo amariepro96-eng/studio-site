@@ -8,6 +8,7 @@ import Publication from './Publication.jsx';
 import EspaceAgence from './EspaceAgence.jsx';
 import DriveAgence from './DriveAgence.jsx';
 import SendBox from './SendBox.jsx';
+import { etatClient, aujourdhuiParis, euros, nomMois } from '../../engine/finances.js';
 import { remoteExtra } from '../RemoteMedia.jsx';
 import { ThumbFrame, DeviceFrame, DeviceToggle, PageTabs } from '../Frames.jsx';
 import { Generating, PreviewModal, ImageStatus, archName, varyModel, nextPalette } from '../App.jsx';
@@ -450,6 +451,33 @@ function ChooseForClient({ rec, save, onCancel }) {
 }
 
 // ---------- Dossier ----------
+// Facturation du client en un coup d'œil ; la saisie se fait dans le suivi financier
+function FacturationResume({ rec }) {
+  const e = etatClient(rec.facturation, aujourdhuiParis());
+  const ab = rec.facturation?.abonnement;
+  const rien = !ab?.montant && !(rec.facturation?.factures || []).length;
+  return (
+    <section className="card side-card" id="facturation">
+      <h2>Facturation</h2>
+      {rien ? (
+        <p className="muted small">Rien de saisi : abonnement, factures et paiements de ce client.</p>
+      ) : (
+        <ul className="pub-checks">
+          <li className={ab?.montant ? 'is-ok' : 'is-wait'}>
+            <span>{ab?.montant ? `Abonnement ${euros(ab.montant)}/mois depuis ${nomMois(ab.debut)}${ab.fin ? `, jusqu’à ${nomMois(ab.fin)}` : ''}` : 'Pas d’abonnement'}</span>
+          </li>
+          <li className={e.retard.total ? 'is-ko' : 'is-ok'}>
+            <span>{e.retard.total ? `${euros(e.retard.total)} en retard` : 'Aucun retard'}{e.attente.total ? ` · ${euros(e.attente.total)} à encaisser` : ''}</span>
+          </li>
+        </ul>
+      )}
+      <a className="btn secondary small" href={`/pilotage/finances?client=${rec.id}`}>
+        {rien ? 'Saisir la facturation' : 'Gérer la facturation'}
+      </a>
+    </section>
+  );
+}
+
 export default function ClientFile({ id, studioName }) {
   const [rec, setRec] = useState(null);
   const [settings, setSettings] = useState(null);
@@ -842,6 +870,7 @@ export default function ClientFile({ id, studioName }) {
                 </button>
               )}
             </section>
+            <FacturationResume rec={rec} />
             <DriveAgence rec={rec} onRecord={(client) => pendingRef.current === 0 && setRec(client)} />
             <section className="card side-card">
               <h2>Historique</h2>

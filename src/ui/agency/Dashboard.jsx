@@ -2,10 +2,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api.js';
 import { AgencyBar, MiniStages, Spinner } from '../Chrome.jsx';
-import { STAGES, stageOf, nextAction, timeAgo } from '../../engine/records.js';
+import { STAGES, stageOf, nextAction, timeAgo, FORMULES } from '../../engine/records.js';
 import { SECTORS } from '../../engine/questions.js';
 
-export const FORMULAS = ['Essentiel', 'Pro', 'Boutique', 'Zéro apport'];
+export const FORMULAS = FORMULES;
 
 const FILTERS = [
   { id: 'all', label: 'Tous', test: () => true },

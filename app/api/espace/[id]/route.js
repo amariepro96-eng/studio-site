@@ -75,7 +75,7 @@ export const GET = route(async (req, { id }) => {
   if (!rec) return json({ error: 'Cet espace n’existe pas ou a été fermé.', code: 'not_found' }, { status: 404 });
   const settings = await getSettings();
   if (!espaceActif(rec) || !siteChoisi(rec)) return json({ error: PAS_ACTIF, code: 'pas_active', studio: studioDe(settings) }, { status: 403 });
-  const q = quiAppelle(req, rec);
+  const q = await quiAppelle(req, rec);
   if (!q) {
     const e = espaceDe(rec);
     return json(
@@ -165,7 +165,7 @@ export const POST = route(async (req, { id }) => {
   }
 
   // ---------- Avec session (client) ou vue agence ----------
-  const q = quiAppelle(req, rec);
+  const q = await quiAppelle(req, rec);
   if (!q) return json({ error: 'Votre session a expiré : reconnectez-vous.', code: 'connexion' }, { status: 401 });
   const { role } = q;
   const e0 = espaceDe(rec);

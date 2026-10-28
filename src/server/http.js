@@ -1,7 +1,7 @@
 // Outils communs aux routes : accès agence, réponses d'erreur, nettoyage des données reçues
 import crypto from 'node:crypto';
 import { BlobError } from '@vercel/blob';
-import { config, agencyToken } from './config.js';
+import { sessionValide } from './securite.js';
 import { StoreError, validId, storageMode } from './store.js';
 import { emptyBrief } from '../engine/questions.js';
 
@@ -23,16 +23,18 @@ export function readCookie(req, name) {
 }
 
 // En ligne, sans mot de passe défini, l'espace agence reste fermé. En local, il est ouvert.
+// Avec mot de passe : session signée, ouverte avec le code de l'appli d'authentification.
 export function isAgency(req) {
-  const { agencyPassword } = config();
-  if (!agencyPassword) return !process.env.VERCEL;
-  return safeEqual(readCookie(req, 'agence'), agencyToken(agencyPassword));
+  return sessionValide(readCookie(req, 'agence'));
 }
 
 // Refuse les appels venus d'un autre site (les cookies ne doivent servir qu'ici)
 export function memeOrigine(req) {
   const origin = req.headers.get('origin');
-  if (!origin) return req.method === 'GET' || req.headers.get('sec-fetch-site') !== 'cross-site';
+  if (!origin) {
+    if (req.method === 'GET' || req.method === 'HEAD') return req.headers.get('sec-fetch-site') !== 'cross-site';
+    return ['same-origin', 'none'].includes(req.headers.get('sec-fetch-site') || '');
+  }
   try {
     return new URL(origin).host === (req.headers.get('x-forwarded-host') || req.headers.get('host'));
   } catch {
@@ -57,7 +59,7 @@ export function safeEqual(a, b) {
 // Enveloppe : erreurs de stockage traduites en messages lisibles
 export function route(fn, { agency = false } = {}) {
   return async (req, ctx) => {
-    if (agency && !isAgency(req)) return fail(401, 'Session agence expirée : reconnectez-vous.', 'unauthorized');
+    if (agency && !(await isAgency(req))) return fail(401, 'Session agence expirée : reconnectez-vous.', 'unauthorized');
     try {
       const params = ctx?.params ? await ctx.params : {};
       return await fn(req, params);

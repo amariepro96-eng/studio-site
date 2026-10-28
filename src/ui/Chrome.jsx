@@ -14,6 +14,7 @@ export function BrandMark() {
 
 export function AgencyBar({ studioName = 'Studio Site', current = 'clients' }) {
   const links = [
+    ['pilotage', '/pilotage', 'Pilotage'],
     ['clients', '/agence', 'Clients'],
     ['atelier', '/agence/atelier', 'Atelier libre'],
     ['reglages', '/agence/reglages', 'Réglages'],
@@ -22,7 +23,7 @@ export function AgencyBar({ studioName = 'Studio Site', current = 'clients' }) {
     try {
       await fetch('/api/agence-login', { method: 'DELETE' });
     } catch {}
-    window.location.href = '/agence';
+    window.location.href = current === 'pilotage' ? '/pilotage' : '/agence';
   }
   return (
     <header className="app-header">
@@ -32,7 +33,7 @@ export function AgencyBar({ studioName = 'Studio Site', current = 'clients' }) {
       </a>
       <nav className="app-nav" aria-label="Espace agence">
         {links.map(([id, href, label]) => (
-          <a key={id} href={href} aria-current={current === id ? 'page' : undefined}>
+          <a key={id} href={href} data-nav={id} aria-current={current === id ? 'page' : undefined}>
             {label}
           </a>
         ))}
