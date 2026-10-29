@@ -55,6 +55,7 @@ export function emptyBrief() {
     pages: ['apropos', 'services', 'faq'],
     features: [],
     goal: 'contact',
+    optionDevis: '',
     services: '',
     products: '',
     strengths: '',
@@ -123,6 +124,10 @@ export const STEPS = [
       { id: 'goal', type: 'radio', label: 'Objectif principal du site', options: GOALS },
       { id: 'pages', type: 'checks', label: 'Pages à inclure', hint: 'L’accueil et le contact sont toujours inclus.', options: PAGES },
       { id: 'features', type: 'checks', label: 'Fonctionnalités utiles', options: FEATURES },
+      { id: 'optionDevis', type: 'radio', label: 'En option : l’appli Devis & Factures', hint: 'Une application à part, installable sur votre téléphone (iPhone ou Android) : vous créez vos devis à partir de vos produits et de vos prix, vos clients les acceptent en ligne, et chaque devis accepté devient une facture.', options: [
+        { id: 'oui', label: 'Oui, ça m’intéresse', hint: 'Nous vous en parlons à la livraison du site' },
+        { id: 'non', label: 'Non merci', hint: 'Vous pourrez la demander plus tard' },
+      ] },
     ],
   },
   {

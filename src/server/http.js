@@ -106,5 +106,6 @@ export function sanitizeBrief(raw) {
     else out[k] = typeof v === 'string' ? v.slice(0, LONG.has(k) ? 3000 : 600) : def;
   }
   if (out.siteType !== 'boutique') out.siteType = 'vitrine';
+  if (!['oui', 'non'].includes(out.optionDevis)) out.optionDevis = '';
   return out;
 }

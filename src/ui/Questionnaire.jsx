@@ -180,6 +180,7 @@ export function Field({ f, brief, set, error, extra = {} }) {
       return (
         <fieldset className={cls}>
           <legend className="q-label">{f.label}</legend>
+          {f.hint && <p className="q-hint">{f.hint}</p>}
           <div className="q-options">
             {f.options.map((o) => (
               <label key={o.id} className={`q-option${v === o.id ? ' on' : ''}`}>

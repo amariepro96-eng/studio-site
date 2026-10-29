@@ -7,6 +7,7 @@ import { AgencyForm } from '../Questionnaire.jsx';
 import Publication from './Publication.jsx';
 import EspaceAgence from './EspaceAgence.jsx';
 import DriveAgence from './DriveAgence.jsx';
+import DevisAgence from './DevisAgence.jsx';
 import SendBox from './SendBox.jsx';
 import { etatClient, aujourdhuiParis, euros, nomMois } from '../../engine/finances.js';
 import { remoteExtra } from '../RemoteMedia.jsx';
@@ -871,6 +872,7 @@ export default function ClientFile({ id, studioName }) {
               )}
             </section>
             <FacturationResume rec={rec} />
+            <DevisAgence rec={rec} settings={settings} onRecord={(client) => pendingRef.current === 0 && setRec(client)} />
             <DriveAgence rec={rec} onRecord={(client) => pendingRef.current === 0 && setRec(client)} />
             <section className="card side-card">
               <h2>Historique</h2>

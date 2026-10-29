@@ -402,3 +402,51 @@ export async function readImage(clientId, imgId) {
   if (!res || res.statusCode !== 200) return null;
   return { stream: res.stream, contentType: res.blob.contentType, etag: res.blob.etag };
 }
+
+// ---------- Appli Devis & Factures (option vendue aux clients) ----------
+//   devis/<espace>.json   un espace par client : compte, entreprise, produits, devis, factures
+//   devis/comptes.json    empreinte de l'e-mail de connexion → espace
+//   devis/cle.json        clé qui signe les sessions de l'appli (créée au premier besoin)
+const WID_RE = /^[A-Za-z0-9_-]{16,40}$/;
+export const widValide = (w) => typeof w === 'string' && WID_RE.test(w);
+function cheminDevis(w) {
+  if (!widValide(w)) throw new StoreError('Lien invalide.', 'bad_id', 404);
+  return `devis/${w}.json`;
+}
+export async function getDevisEspace(w) {
+  const cur = await readJson(cheminDevis(w));
+  return cur?.data || null;
+}
+export function updateDevisEspace(w, fn) {
+  return updateJson(cheminDevis(w), fn);
+}
+export async function creerDevisEspace(w, data) {
+  await writeRaw(cheminDevis(w), JSON.stringify(data), { contentType: 'application/json', overwrite: false });
+  return data;
+}
+export const COMPTES_DEVIS_VIDE = { emails: {} };
+export async function getComptesDevis() {
+  const cur = await readJson('devis/comptes.json');
+  return { ...COMPTES_DEVIS_VIDE, ...(cur?.data || {}) };
+}
+export function updateComptesDevis(fn) {
+  return upsertJson('devis/comptes.json', COMPTES_DEVIS_VIDE, (s) => fn({ ...COMPTES_DEVIS_VIDE, ...s }));
+}
+let cleDevisMemo = null;
+export async function cleDevis() {
+  if (cleDevisMemo) return cleDevisMemo;
+  let k = (await readJson('devis/cle.json'))?.data?.k;
+  if (!k) {
+    const nouvelle = crypto.randomBytes(32).toString('base64url');
+    try {
+      await writeRaw('devis/cle.json', JSON.stringify({ k: nouvelle, creeLe: new Date().toISOString() }), { contentType: 'application/json', overwrite: false });
+      k = nouvelle;
+    } catch {
+      // Créée au même instant par un autre appel : on prend la sienne
+      k = (await readJson('devis/cle.json'))?.data?.k;
+    }
+  }
+  if (!k) throw new StoreError('L’appli Devis n’a pas pu préparer sa clé de connexion. Réessayez.', 'no_key', 503);
+  cleDevisMemo = Buffer.from(k, 'base64url');
+  return cleDevisMemo;
+}
