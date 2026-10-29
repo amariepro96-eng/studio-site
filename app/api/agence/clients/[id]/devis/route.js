@@ -7,6 +7,8 @@ import { rateLimited, clientIp } from '../../../../../../src/server/config.js';
 import { mailPret, envoyerMail } from '../../../../../../src/server/mail.js';
 import { creerInvitation, lienInvitation, libererEmail, masquerEmail, noterJournal, origineLiens, DUREE } from '../../../../../../src/server/devisAcces.js';
 import { entrepriseVide, nettoyerEntreprise, emailOk, FORMES, messageInvitation } from '../../../../../../src/engine/devis.js';
+import { resumeEspace, supprimerAppli } from '../../../../../../src/server/devisAgence.js';
+import { activerCalculateur } from '../../../../../../src/server/devisMetier.js';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -30,26 +32,6 @@ function entrepriseDepuisBrief(rec) {
     telephone: b.phone || '',
     site: rec.publication?.domain ? `https://${rec.publication.domain}` : rec.liveUrl || '',
   });
-}
-
-function resume(esp) {
-  if (!esp) return null;
-  const inv = esp.invitation;
-  const appareils = esp.appareils || [];
-  return {
-    actif: esp.actif !== false,
-    creeLe: esp.creeLe,
-    emailPropose: esp.emailPropose || '',
-    // Une fois le compte créé, tout nouveau lien part UNIQUEMENT à l'adresse du propriétaire
-    proprietaire: esp.emailProprietaire ? masquerEmail(esp.emailProprietaire) : '',
-    invitation: inv ? { creeLe: inv.creeLe, exp: new Date(inv.exp).toISOString(), utiliseeLe: inv.utiliseeLe || null } : null,
-    compte: esp.compte ? { email: masquerEmail(esp.compte.email), creeLe: esp.compte.creeLe, deuxFacteurs: Boolean(esp.compte.totp) } : null,
-    appareils: appareils.length,
-    dernierVu: appareils.map((a) => a.vuLe).sort().pop() || null,
-    nbDevis: (esp.devis || []).length,
-    nbFactures: (esp.factures || []).filter((f) => f.numero).length,
-    nbProduits: (esp.produits || []).length,
-  };
 }
 
 // Après une réinitialisation : le lien part seulement à l'adresse du propriétaire du compte,
@@ -86,7 +68,7 @@ export const POST = route(
 
     switch (action) {
       case 'statut':
-        return ok({ appli: resume(esp), mail: mailPret(), option: rec.brief?.optionDevis || '' });
+        return ok({ appli: resumeEspace(esp), mail: mailPret(), option: rec.brief?.optionDevis || '' });
 
       // Active l'option (première fois) ou crée un nouveau lien d'invitation
       case 'inviter':
@@ -111,7 +93,7 @@ export const POST = route(
             r.log = [...(r.log || []), { at: maintenant(), what: 'Appli Devis : nouveau lien envoyé à l’adresse du compte du client' }];
             return r;
           });
-          return ok({ client, appli: resume(await getDevisEspace(w)), lien: null, envoye: true, proprietaire: true, exp: j.exp, dureeJours: DUREE.invitation / 86400e3 });
+          return ok({ client, appli: resumeEspace(await getDevisEspace(w)), lien: null, envoye: true, proprietaire: true, exp: j.exp, dureeJours: DUREE.invitation / 86400e3 });
         }
         let wid = w;
         let jeton = null;
@@ -146,7 +128,7 @@ export const POST = route(
           r.log = [...(r.log || []), { at: maintenant(), what: envoye ? `Appli Devis : invitation envoyée à ${email}` : 'Appli Devis : lien d’invitation créé' }];
           return r;
         });
-        return ok({ client, appli: resume(await getDevisEspace(wid)), lien: envoye ? null : url, envoye, exp: jeton.exp, dureeJours: DUREE.invitation / 86400e3 });
+        return ok({ client, appli: resumeEspace(await getDevisEspace(wid)), lien: envoye ? null : url, envoye, exp: jeton.exp, dureeJours: DUREE.invitation / 86400e3 });
       }
 
       case 'couper':
@@ -167,7 +149,7 @@ export const POST = route(
           r.log = [...(r.log || []), { at: maintenant(), what: couper ? 'Appli Devis : accès suspendu' : 'Appli Devis : accès rétabli' }];
           return r;
         });
-        return ok({ client, appli: resume(e2) });
+        return ok({ client, appli: resumeEspace(e2) });
       }
 
       // Mot de passe et téléphone perdus : le compte est recréé avec un nouveau lien, les données restent
@@ -196,7 +178,31 @@ export const POST = route(
         });
         const e2 = await getDevisEspace(w);
         await envoyerAuProprietaire(e2, { url: lienInvitation(origineLiens(origine(req)), w, jeton.jeton), nom, owner, settings });
-        return ok({ client, appli: resume(e2), lien: null, envoye: true, proprietaire: true, exp: jeton.exp });
+        return ok({ client, appli: resumeEspace(e2), lien: null, envoye: true, proprietaire: true, exp: jeton.exp });
+      }
+
+      // Calculateur d'estimation : activé ou coupé par l'agence (le client règle ses tarifs)
+      case 'calculateur': {
+        if (!esp) return fail(404, 'L’appli n’est pas activée pour ce client.', 'not_found');
+        const actif = body.actif === true;
+        const e2 = await updateDevisEspace(w, (e) => {
+          activerCalculateur(e, { actif, modele: String(body.modele || '') });
+          noterJournal(e, actif ? `Calculateur d’estimation activé par ${owner}` : `Calculateur d’estimation désactivé par ${owner}`);
+          return e;
+        });
+        const client = await updateClient(id, (r) => {
+          r.log = [...(r.log || []), { at: maintenant(), what: actif ? 'Appli Devis : calculateur d’estimation activé' : 'Appli Devis : calculateur d’estimation désactivé' }];
+          return r;
+        });
+        return ok({ client, appli: resumeEspace(e2) });
+      }
+
+      // Suppression complète (compte, devis, factures, produits) : confirmée par le nom du client
+      case 'supprimer': {
+        if (!esp) return fail(404, 'L’appli n’est pas activée pour ce client.', 'not_found');
+        if (body.confirme !== true) return fail(400, 'Confirme la suppression.', 'confirmation');
+        await supprimerAppli(w, { clientId: id, qui: owner });
+        return ok({ client: await getClient(id), appli: null, supprime: true });
       }
 
       default:

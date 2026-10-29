@@ -8,6 +8,7 @@
 // supprime plus.
 import crypto from 'node:crypto';
 import * as D from '../engine/devis.js';
+import { nettoyerCalculateur, modeleCalc, MODELES } from '../engine/calculateur.js';
 import { StoreError } from './store.js';
 import { empreinte, noterJournal } from './devisAcces.js';
 import { mailPret, envoyerMail } from './mail.js';
@@ -46,6 +47,7 @@ export function vueApp(esp, appareil) {
       appareils: (esp.appareils || []).map((a) => ({ ...a, actuel: a.id === appareil?.id })).reverse(),
       journal: (esp.journal || []).slice(-30).reverse(),
     },
+    calculateur: esp.calculateur || null,
     manques: D.manquesEntreprise(esp.entreprise),
     mail: mailPret(),
     jour: D.aujourdhuiParis(),
@@ -58,6 +60,22 @@ export function enregistrerEntreprise(esp, entreprise) {
 }
 export function enregistrerProduits(esp, produits) {
   esp.produits = D.nettoyerProduits(produits);
+}
+
+// ---------- Calculateur d'estimation (option activée par l'agence, tarifs réglés par le client) ----------
+export function enregistrerCalculateur(esp, c) {
+  if (!esp.calculateur?.actif) throw erreur('Le calculateur n’est pas activé : demandez-le à votre prestataire.', 'calc_off', 403);
+  esp.calculateur = nettoyerCalculateur({ ...c, actif: true, modele: esp.calculateur.modele });
+}
+export function appliquerModeleCalc(esp, id) {
+  if (!esp.calculateur?.actif) throw erreur('Le calculateur n’est pas activé : demandez-le à votre prestataire.', 'calc_off', 403);
+  if (!MODELES[id]) throw erreur('Modèle inconnu.');
+  esp.calculateur = modeleCalc(id, true);
+}
+// Côté agence : activer (avec un modèle de départ, la première fois) ou désactiver
+export function activerCalculateur(esp, { actif, modele }) {
+  if (actif) esp.calculateur = esp.calculateur ? { ...esp.calculateur, actif: true } : modeleCalc(modele, true);
+  else if (esp.calculateur) esp.calculateur = { ...esp.calculateur, actif: false };
 }
 
 // ---------- Devis ----------

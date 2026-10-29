@@ -653,6 +653,7 @@ export default function ClientFile({ id, studioName }) {
       window.location.href = '/agence';
     } catch (e) {
       setError(e.message);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   }
 

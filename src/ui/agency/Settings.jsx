@@ -110,6 +110,15 @@ export default function Settings({ studioName }) {
           </form>
         )}
         {s && storage !== 'none' && <Securite />}
+        {s && storage !== 'none' && (
+          <section className="card settings cd-reglage" aria-labelledby="cd-titre">
+            <h2 id="cd-titre">Comptes Devis & Factures</h2>
+            <p className="muted small">Les comptes de l’appli Devis & Factures de tes clients : état de chaque accès, suspension, réinitialisation, suppression. Les mots de passe ne sont jamais visibles.</p>
+            <a className="btn secondary" href="/agence/devis">
+              Gérer les comptes
+            </a>
+          </section>
+        )}
       </main>
     </div>
   );

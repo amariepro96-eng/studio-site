@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api.js';
 import { CodeSecours, ReliePhone } from '../AgencyLogin.jsx';
+import ReglagesCalculateur from './ReglagesCalculateur.jsx';
 import { Fenetre, ChampEuros, ChampMdp, ChampCode, codeComplet, appelAcces, fmtQuand, fmtJour } from './commun.jsx';
 import { euros, FORMES, TAUX_TVA, UNITES, tauxLabel, lireListeProduits, nettoyerEntreprise, PENALITES_DEFAUT, emailOk, NATURES } from '../../engine/devis.js';
 
@@ -802,14 +803,16 @@ function Installer() {
 
 export default function Reglages(props) {
   const { nav, aller } = props;
-  const sec = SECTIONS.some(([id]) => id === nav.section) ? nav.section : 'entreprise';
+  // « Calculateur » seulement si l'agence a activé l'option
+  const sections = props.data.calculateur?.actif ? [...SECTIONS.slice(0, 2), ['calculateur', 'Calculateur'], ...SECTIONS.slice(2)] : SECTIONS;
+  const sec = sections.some(([id]) => id === nav.section) ? nav.section : 'entreprise';
   return (
     <section className="dv-page">
       <div className="dv-page-tete">
         <h1>Réglages</h1>
       </div>
       <div className="dv-filtres dv-sous-onglets" role="tablist" aria-label="Réglages">
-        {SECTIONS.map(([id, label]) => (
+        {sections.map(([id, label]) => (
           <button key={id} type="button" role="tab" aria-selected={sec === id} aria-pressed={sec === id} onClick={() => aller({ onglet: 'reglages', section: id }, { remplacer: true })}>
             {label}
             {id === 'entreprise' && props.data.manques.length > 0 && <span className="dv-badge">!</span>}
@@ -818,6 +821,7 @@ export default function Reglages(props) {
       </div>
       {sec === 'entreprise' && <Entreprise {...props} />}
       {sec === 'produits' && <Produits {...props} />}
+      {sec === 'calculateur' && <ReglagesCalculateur {...props} />}
       {sec === 'securite' && <Securite {...props} />}
       {sec === 'installer' && <Installer />}
     </section>

@@ -2,6 +2,7 @@
 // Onglet Devis : liste, fiche d'un devis (envoi, réponses du client) et rédaction
 import { useEffect, useMemo, useState } from 'react';
 import Document from './Document.jsx';
+import Calculateur from './Calculateur.jsx';
 import { Pastille, Fenetre, ChampEuros, LienCree, fmtJour, fmtQuand } from './commun.jsx';
 import { vueDevis, statutDevis } from './vues.js';
 import { euros, totaux, lireQuantite, formatQuantite, TAUX_TVA, UNITES, manquesDevis, nettoyerClient, ligneHT } from '../../engine/devis.js';
@@ -69,6 +70,7 @@ function CarteInstaller({ aller }) {
 // ---------- Liste ----------
 function Liste({ data, aller }) {
   const [filtre, setFiltre] = useState('tous');
+  const [calcul, setCalcul] = useState(false);
   const [q, setQ] = useState('');
   const jour = data.jour;
   const tous = useMemo(() => [...data.devis].sort((a, b) => String(b.modifieLe || b.creeLe).localeCompare(String(a.modifieLe || a.creeLe))), [data.devis]);
@@ -84,10 +86,18 @@ function Liste({ data, aller }) {
     <section className="dv-page">
       <div className="dv-page-tete">
         <h1>Devis</h1>
-        <button type="button" className="btn primary" onClick={() => aller({ onglet: 'devis', ecran: 'edition', id: null })}>
-          + Nouveau devis
-        </button>
+        <span className="row-actions">
+          {data.calculateur?.actif && (
+            <button type="button" className="btn secondary" onClick={() => setCalcul(true)}>
+              Calculateur
+            </button>
+          )}
+          <button type="button" className="btn primary" onClick={() => aller({ onglet: 'devis', ecran: 'edition', id: null })}>
+            + Nouveau devis
+          </button>
+        </span>
       </div>
+      {calcul && <Calculateur calc={data.calculateur} franchise={data.entreprise.franchise} libelleAction="Créer un devis avec ce calcul" onClose={() => setCalcul(false)} onAjouter={(lignes) => (setCalcul(false), aller({ onglet: 'devis', ecran: 'edition', id: null, lignes }))} />}
       {data.manques.length > 0 && (
         <div className="dv-carte-info attention">
           <span>
@@ -489,19 +499,20 @@ function ChoixProduits({ produits, onAjout, onClose, aller }) {
   );
 }
 
-function Editeur({ data, agir, aller, garde, id }) {
+function Editeur({ data, agir, aller, garde, id, nav }) {
   const d = id ? data.devis.find((x) => x.id === id) : null;
   const e = data.entreprise;
   const [client, setClient] = useState(() => nettoyerClient(d?.client));
   const [objet, setObjet] = useState(d?.objet || '');
-  const [lignes, setLignes] = useState(() => (d?.lignes || []).map(versLigne));
+  const [lignes, setLignes] = useState(() => (d?.lignes || (Array.isArray(nav?.lignes) ? nav.lignes : [])).map(versLigne));
   const [validite, setValidite] = useState(String(d?.validiteJours ?? e.validiteJours ?? 30));
   const [acompte, setAcompte] = useState(String(d?.acomptePct ?? e.acomptePct ?? 0));
   const [notes, setNotes] = useState(d?.notes || '');
   const [choix, setChoix] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
-  const [modifie, setModifie] = useState(false);
+  const [modifie, setModifie] = useState(() => !d && Array.isArray(nav?.lignes) && nav.lignes.length > 0);
+  const [calcul, setCalcul] = useState(false);
   useEffect(() => {
     garde.current = modifie || null;
     return () => {
@@ -725,6 +736,11 @@ function Editeur({ data, agir, aller, garde, id }) {
           <button type="button" className="btn primary" onClick={() => setChoix(true)}>
             + Depuis mes produits
           </button>
+          {data.calculateur?.actif && (
+            <button type="button" className="btn secondary" onClick={() => setCalcul(true)}>
+              + Calculer
+            </button>
+          )}
           <button type="button" className="btn secondary" onClick={() => changer(setLignes)([...lignes, versLigne({})])}>
             + Ligne libre
           </button>
@@ -781,6 +797,18 @@ function Editeur({ data, agir, aller, garde, id }) {
       )}
 
       {choix && <ChoixProduits produits={data.produits} onAjout={ajouterProduit} onClose={() => setChoix(false)} aller={aller} />}
+      {calcul && (
+        <Calculateur
+          calc={data.calculateur}
+          franchise={e.franchise}
+          onClose={() => setCalcul(false)}
+          onAjouter={(nouvelles) => {
+            setModifie(true);
+            setLignes((ls) => [...ls, ...nouvelles.map(versLigne)]);
+            setCalcul(false);
+          }}
+        />
+      )}
     </section>
   );
 }

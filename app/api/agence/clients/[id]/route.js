@@ -1,6 +1,6 @@
 import { after } from 'next/server';
 import { route, ok, readBody, fail, sanitizeBrief } from '../../../../../src/server/http.js';
-import { getClient, updateClient, deleteClient, STATUSES, validId, getSettings } from '../../../../../src/server/store.js';
+import { getClient, updateClient, deleteClient, STATUSES, validId, getSettings, getDevisEspace } from '../../../../../src/server/store.js';
 import { STAGES } from '../../../../../src/engine/records.js';
 import { driveStatus, envoyerVersDrive } from '../../../../../src/server/drive.js';
 
@@ -77,6 +77,9 @@ export const PATCH = route(
 
 export const DELETE = route(
   async (req, { id }) => {
+    // Un client avec l'appli Devis & Factures : ses devis et factures ne partent pas par erreur
+    const rec = await getClient(id);
+    if (rec?.appliDevis?.wid && (await getDevisEspace(rec.appliDevis.wid))) return fail(409, 'Ce client a l’appli Devis & Factures : supprime-la d’abord (bloc Appli Devis & Factures du dossier, ou Réglages › Comptes Devis & Factures).', 'devis_actif');
     await deleteClient(id);
     return ok({ ok: true });
   },

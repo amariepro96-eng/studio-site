@@ -420,6 +420,22 @@ export async function getDevisEspace(w) {
 export function updateDevisEspace(w, fn) {
   return updateJson(cheminDevis(w), fn);
 }
+// Tous les espaces (pour la page « Comptes Devis & Factures » de l'agence)
+export async function listerDevisEspaces() {
+  const paths = await listJson('devis/');
+  return paths.map((p) => p.slice('devis/'.length, -'.json'.length)).filter(widValide);
+}
+export async function supprimerDevisEspace(w) {
+  const p = cheminDevis(w);
+  assertReady();
+  if (storageMode() === 'local') {
+    await fs.rm(localPath(p), { force: true });
+    await fs.rm(localPath(p) + '.meta', { force: true });
+    return;
+  }
+  const { del } = await blob();
+  await del([p]);
+}
 export async function creerDevisEspace(w, data) {
   await writeRaw(cheminDevis(w), JSON.stringify(data), { contentType: 'application/json', overwrite: false });
   return data;

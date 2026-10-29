@@ -91,6 +91,14 @@ export const POST = route(async (req) => {
       }
       return vue(esp, { note: 'Informations de l’entreprise enregistrées.' });
     }
+    case 'calculateur': {
+      const { esp } = await modifier(s, (e) => M.enregistrerCalculateur(e, body.calculateur));
+      return vue(esp, { note: 'Tarifs du calculateur enregistrés.' });
+    }
+    case 'calculateur.modele': {
+      const { esp } = await modifier(s, (e) => M.appliquerModeleCalc(e, body.modele));
+      return vue(esp, { note: 'Modèle appliqué : vérifiez vos tarifs.' });
+    }
     case 'produits': {
       const { esp } = await modifier(s, (e) => M.enregistrerProduits(e, body.produits));
       return vue(esp, { note: `${esp.produits.length} produit${esp.produits.length > 1 ? 's' : ''} et prix enregistré${esp.produits.length > 1 ? 's' : ''}.` });

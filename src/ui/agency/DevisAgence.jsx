@@ -6,6 +6,10 @@ import { api } from '../api.js';
 import SendBox from './SendBox.jsx';
 import { messageInvitation } from '../../engine/devis.js';
 import { timeAgo } from '../../engine/records.js';
+import { SuppressionDevis } from './ComptesDevis.jsx';
+import { LISTE_MODELES } from '../../engine/calculateur.js';
+
+const nomModele = (id) => LISTE_MODELES.find((m) => m.id === id)?.nom || id;
 
 const isEmail = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(s || '').trim());
 const fmt = (iso) => (iso ? new Date(iso).toLocaleString('fr-FR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) : '');
@@ -20,8 +24,9 @@ export default function DevisAgence({ rec, onRecord, settings }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [note, setNote] = useState('');
-  const [confirmer, setConfirmer] = useState(null); // 'couper' | 'reinitialiser'
+  const [confirmer, setConfirmer] = useState(null); // 'couper' | 'reinitialiser' | 'supprimer'
   const [ouvert, setOuvert] = useState(false);
+  const [modele, setModele] = useState('impression3d');
 
   async function appel(action, body = {}) {
     setBusy(true);
@@ -61,6 +66,11 @@ export default function DevisAgence({ rec, onRecord, settings }) {
         <button type="button" className="btn-text small" onClick={() => setOuvert(true)}>
           Proposer ou activer l’option
         </button>
+        {note && (
+          <p className="side-note" role="status">
+            {note}
+          </p>
+        )}
       </section>
     );
 
@@ -126,6 +136,38 @@ export default function DevisAgence({ rec, onRecord, settings }) {
             </li>
           )}
         </ul>
+      )}
+
+      {a && (
+        <div className="dv-ag-calc">
+          <span className="q-label">Calculateur d’estimation</span>
+          {a.calculateur?.actif ? (
+            <p className="small">
+              Activé (modèle de départ : {nomModele(a.calculateur.modele)}). Le client règle ses tarifs dans son appli, Réglages › Calculateur.{' '}
+              <button type="button" className="btn-text small quiet" disabled={busy} onClick={async () => (await appel('calculateur', { actif: false })) && setNote('Calculateur désactivé : ses réglages sont gardés.')}>
+                Désactiver
+              </button>
+            </p>
+          ) : (
+            <>
+              <p className="q-hint">En option : le client calcule ses prix (ex. impression 3D : matière, temps machine, finitions, délai, expédition) et transforme le résultat en lignes de devis. Il règle lui-même ses tarifs.</p>
+              <div className="row-actions">
+                {!a.calculateur && (
+                  <select aria-label="Modèle de départ" value={modele} onChange={(e) => setModele(e.target.value)}>
+                    {LISTE_MODELES.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.nom}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <button type="button" className="btn secondary small" disabled={busy} onClick={async () => (await appel('calculateur', { actif: true, modele })) && setNote('Calculateur activé : il apparaît dans son appli.')}>
+                  {a.calculateur ? 'Réactiver le calculateur' : 'Activer le calculateur'}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       )}
 
       {peutInviter && (!a || !invValable || ouvert) && (
@@ -225,6 +267,23 @@ export default function DevisAgence({ rec, onRecord, settings }) {
                 Annuler
               </button>
             </p>
+          ) : confirmer === 'supprimer' ? (
+            <SuppressionDevis
+              nom={nom}
+              appli={a}
+              busy={busy}
+              onCancel={() => setConfirmer(null)}
+              onConfirm={async () => {
+                const d = await appel('supprimer', { confirme: true });
+                if (d?.supprime) {
+                  setConfirmer(null);
+                  setLien(null);
+                  setOuvert(false);
+                  setEtat((x) => ({ ...(x || {}), appli: null }));
+                  setNote('Appli Devis & Factures supprimée.');
+                }
+              }}
+            />
           ) : (
             <>
               {a.actif ? (
@@ -241,9 +300,17 @@ export default function DevisAgence({ rec, onRecord, settings }) {
                   Réinitialiser son compte
                 </button>
               )}
+              <button type="button" className="btn-text small quiet danger" onClick={() => setConfirmer('supprimer')}>
+                Supprimer l’appli
+              </button>
             </>
           )}
         </div>
+      )}
+      {a && (
+        <a className="btn-text small quiet" href="/agence/devis">
+          Tous les comptes Devis & Factures
+        </a>
       )}
     </section>
   );

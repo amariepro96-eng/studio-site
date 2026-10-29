@@ -90,7 +90,7 @@ export function Fenetre({ titre, onClose, children, large = false }) {
   }, [onClose]);
   return (
     <div className="dv-voile" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={`dv-fenetre${large ? ' large' : ''}`} role="dialog" aria-modal="true" aria-label={titre}>
+      <div className={`dv-fenetre${large === 'xl' ? ' xl' : large ? ' large' : ''}`} role="dialog" aria-modal="true" aria-label={titre}>
         <div className="dv-fenetre-tete">
           <h2>{titre}</h2>
           <button type="button" className="icon-btn" aria-label="Fermer" onClick={onClose}>
