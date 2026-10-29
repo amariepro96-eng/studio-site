@@ -14,12 +14,12 @@ export async function appelAcces(body) {
   }
 }
 
-export function Marque({ nom = '' }) {
+export function Marque({ nom = '', titre = 'Devis & Factures' }) {
   return (
     <span className="dv-marque">
       <img src="/icons/devis-180.png" alt="" width={30} height={30} />
       <span className="dv-marque-texte">
-        <strong>Devis & Factures</strong>
+        <strong>{titre}</strong>
         {nom && <span>{nom}</span>}
       </span>
     </span>

@@ -803,9 +803,15 @@ function Installer() {
 
 export default function Reglages(props) {
   const { nav, aller } = props;
-  // « Calculateur » seulement si l'agence a activé l'option
-  const sections = props.data.calculateur?.actif ? [...SECTIONS.slice(0, 2), ['calculateur', 'Calculateur'], ...SECTIONS.slice(2)] : SECTIONS;
-  const sec = sections.some(([id]) => id === nav.section) ? nav.section : 'entreprise';
+  const facturation = props.data.rubriques?.facturation !== false;
+  // Site seul : seulement le compte (Sécurité, Installer). Avec facturation : tout, + Calculateur si activé.
+  const sections = !facturation
+    ? SECTIONS.filter(([id]) => id === 'securite' || id === 'installer')
+    : props.data.calculateur?.actif
+      ? [...SECTIONS.slice(0, 2), ['calculateur', 'Calculateur'], ...SECTIONS.slice(2)]
+      : SECTIONS;
+  const defautSec = facturation ? 'entreprise' : 'securite';
+  const sec = sections.some(([id]) => id === nav.section) ? nav.section : defautSec;
   return (
     <section className="dv-page">
       <div className="dv-page-tete">

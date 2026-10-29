@@ -10,6 +10,7 @@ export function resumeEspace(esp) {
   const appareils = esp.appareils || [];
   return {
     actif: esp.actif !== false,
+    facturation: esp.rubriques?.facturation !== false, // « site seul » = false
     creeLe: esp.creeLe,
     emailPropose: esp.emailPropose || '',
     // Une fois le compte créé, tout nouveau lien part UNIQUEMENT à l'adresse du propriétaire

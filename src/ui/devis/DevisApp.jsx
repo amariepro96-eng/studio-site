@@ -18,6 +18,7 @@ const DEPART = { onglet: 'devis', ecran: 'liste', id: null };
 
 function Icone({ nom }) {
   const p = {
+    accueil: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
     site: 'M4 11l8-7 8 7M6 10v9h12v-9M10 19v-6h4v6',
     devis: 'M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6',
     factures: 'M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6M9 16h3',
@@ -27,6 +28,28 @@ function Icone({ nom }) {
     <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <path d={p} />
     </svg>
+  );
+}
+
+// Accueil d'un compte « site seul » : un seul geste, ouvrir le site. Le reste (mot de passe,
+// code, appareils) est dans « Mon compte ».
+function AccueilSite({ data, versSite, ouvrir }) {
+  const dispo = Boolean(data.site?.disponible);
+  return (
+    <section className="dv-page dv-accueil">
+      <div className="dv-page-tete">
+        <h1>Mon espace</h1>
+      </div>
+      <div className="card dv-accueil-carte">
+        <h2>Mon site</h2>
+        <p className="muted">Modifiez vos horaires, vos prix, vos photos et vos annonces, puis publiez votre site.</p>
+        <button type="button" className="btn primary" disabled={!dispo || versSite} onClick={ouvrir}>
+          {versSite ? 'Ouverture…' : 'Ouvrir mon site'}
+        </button>
+        {!dispo && <p className="muted small">Votre site n’est pas encore en ligne : votre prestataire le publiera bientôt.</p>}
+      </div>
+      <p className="muted small">Votre mot de passe, le code du téléphone et vos appareils : onglet « Mon compte ».</p>
+    </section>
   );
 }
 
@@ -168,26 +191,31 @@ export default function DevisApp() {
     );
 
   const jour = data.jour;
-  const nbRepondus = data.devis.filter((d) => ['modification'].includes(d.statut)).length;
-  const nbAEmettre = data.factures.filter((f) => f.statut === 'a_emettre').length + data.factures.filter((f) => statutFacture(f, jour) === 'retard').length;
-  const badges = { devis: nbRepondus, factures: nbAEmettre, reglages: data.manques.length ? '!' : 0 };
+  // Site seul (sans facturation) : ni Devis ni Factures, un accueil avec « Ouvrir mon site » + le compte
+  const facturation = data.rubriques?.facturation !== false;
+  const nbRepondus = facturation ? data.devis.filter((d) => ['modification'].includes(d.statut)).length : 0;
+  const nbAEmettre = facturation ? data.factures.filter((f) => f.statut === 'a_emettre').length + data.factures.filter((f) => statutFacture(f, jour) === 'retard').length : 0;
+  const badges = facturation ? { devis: nbRepondus, factures: nbAEmettre, reglages: data.manques.length ? '!' : 0 } : {};
+  const onglets = facturation ? ONGLETS : [['accueil', 'Accueil'], ['reglages', 'Mon compte']];
+  const onglet = facturation ? nav.onglet : nav.onglet === 'reglages' ? 'reglages' : 'accueil';
+  const siteLanceur = facturation && data.site?.disponible;
   const props = { data, agir, nav, aller, garde, setToast, recharger: charger };
 
   return (
     <div className="ss dv dv-app">
       <header className="dv-entete">
-        <Marque nom={data.entreprise.nom} />
+        <Marque nom={data.entreprise.nom} titre={facturation ? undefined : 'Espace client'} />
         <nav className="dv-onglets-haut" aria-label="Sections">
-          {data.site?.disponible && (
+          {siteLanceur && (
             <a href={`/espace/${data.site.id}`} className="dv-lien-site" onClick={(e) => { e.preventDefault(); ouvrirMonSite(data.site.id); }}>
               {versSite ? 'Ouverture…' : 'Mon site'}
             </a>
           )}
-          {ONGLETS.map(([id, label]) => (
+          {onglets.map(([id, label]) => (
             <a
               key={id}
               href={id === 'devis' ? '/devis' : `/devis#${id}`}
-              aria-current={nav.onglet === id ? 'page' : undefined}
+              aria-current={onglet === id ? 'page' : undefined}
               onClick={(e) => {
                 e.preventDefault();
                 aller({ onglet: id });
@@ -201,23 +229,24 @@ export default function DevisApp() {
       </header>
 
       <main className="dv-main">
-        {nav.onglet === 'devis' && <Devis {...props} />}
-        {nav.onglet === 'factures' && <Factures {...props} />}
-        {nav.onglet === 'reglages' && <Reglages {...props} />}
+        {onglet === 'accueil' && <AccueilSite data={data} versSite={versSite} ouvrir={() => ouvrirMonSite(data.site?.id)} />}
+        {onglet === 'devis' && <Devis {...props} />}
+        {onglet === 'factures' && <Factures {...props} />}
+        {onglet === 'reglages' && <Reglages {...props} />}
       </main>
 
       <nav className="dv-onglets-bas" aria-label="Sections">
-        {data.site?.disponible && (
+        {siteLanceur && (
           <a href={`/espace/${data.site.id}`} className="dv-lien-site" onClick={(e) => { e.preventDefault(); ouvrirMonSite(data.site.id); }}>
             <Icone nom="site" />
             <span>{versSite ? 'Ouverture…' : 'Mon site'}</span>
           </a>
         )}
-        {ONGLETS.map(([id, label]) => (
+        {onglets.map(([id, label]) => (
           <a
             key={id}
             href={id === 'devis' ? '/devis' : `/devis#${id}`}
-            aria-current={nav.onglet === id ? 'page' : undefined}
+            aria-current={onglet === id ? 'page' : undefined}
             onClick={(e) => {
               e.preventDefault();
               aller({ onglet: id });

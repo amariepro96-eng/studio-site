@@ -8,7 +8,7 @@ import { mailPret, envoyerMail } from '../../../../../../src/server/mail.js';
 import { creerInvitation, lienInvitation, libererEmail, masquerEmail, noterJournal, origineLiens, DUREE } from '../../../../../../src/server/devisAcces.js';
 import { entrepriseVide, nettoyerEntreprise, emailOk, FORMES, messageInvitation } from '../../../../../../src/engine/devis.js';
 import { resumeEspace, supprimerAppli } from '../../../../../../src/server/devisAgence.js';
-import { oublierAppareilsCompte } from '../../../../../../src/server/espace.js';
+import { oublierAppareilsCompte, preparer, espaceActif, siteChoisi } from '../../../../../../src/server/espace.js';
 import { activerCalculateur } from '../../../../../../src/server/devisMetier.js';
 
 export const runtime = 'nodejs';
@@ -96,17 +96,22 @@ export const POST = route(
           });
           return ok({ client, appli: resumeEspace(await getDevisEspace(w)), lien: null, envoye: true, proprietaire: true, exp: j.exp, dureeJours: DUREE.invitation / 86400e3 });
         }
+        // Rubriques : par défaut facturation active ; « site seul » = accès au site sans la facturation
+        const facturation = body.facturation !== false;
         let wid = w;
         let jeton = null;
         if (!esp) {
+          if (!facturation && !siteChoisi(rec)) return fail(409, 'Ce client n’a pas encore de site en ligne : impossible d’activer « l’espace du site seul ».', 'pas_de_site');
           wid = newId(18);
-          const nouveau = { v: 1, id: wid, clientId: id, creeLe: maintenant(), actif: true, emailPropose: email, invitation: null, compte: null, sv: 1, echecs: [], appareils: [], reinit: null, entreprise: entrepriseDepuisBrief(rec), produits: [], compteurs: { devis: {}, factures: {} }, devis: [], factures: [], journal: [] };
+          const nouveau = { v: 1, id: wid, clientId: id, creeLe: maintenant(), actif: true, rubriques: { facturation }, emailPropose: email, invitation: null, compte: null, sv: 1, echecs: [], appareils: [], reinit: null, entreprise: entrepriseDepuisBrief(rec), produits: [], compteurs: { devis: {}, factures: {} }, devis: [], factures: [], journal: [] };
           jeton = creerInvitation(nouveau);
-          noterJournal(nouveau, `Appli activée par ${owner}`);
+          noterJournal(nouveau, facturation ? `Appli activée par ${owner}` : `Espace client (site seul) activé par ${owner}`);
           await creerDevisEspace(wid, nouveau);
           await updateClient(id, (r) => {
-            r.appliDevis = { wid, activeLe: maintenant() };
-            r.log = [...(r.log || []), { at: maintenant(), what: 'Appli Devis & Factures activée' }];
+            r.appliDevis = { wid, activeLe: maintenant(), facturation };
+            // Pour « site seul », préparer l'espace du site s'il ne l'est pas (sinon « Mon site » resterait vide)
+            if (!facturation && !espaceActif(r)) preparer(r, { par: 'agence' });
+            r.log = [...(r.log || []), { at: maintenant(), what: facturation ? 'Appli Devis & Factures activée' : 'Espace client (accès au site) activé' }];
             return r;
           });
         } else {

@@ -32,9 +32,14 @@ export function normaliser(esp) {
 
 // ---------- Ce que reçoit l'appli ----------
 const sansLien = ({ lien, ...x }) => ({ ...x, aLien: Boolean(lien) });
+// Rubriques de l'espace client : facturation absente = active (compatibilité : les comptes créés
+// avant portaient toujours la facturation). Un compte « site seul » a facturation:false.
+export const rubriquesDe = (esp) => ({ facturation: esp?.rubriques?.facturation !== false });
 export function vueApp(esp, appareil) {
   const c = esp.compte || {};
+  const rub = rubriquesDe(esp);
   return {
+    rubriques: rub,
     entreprise: esp.entreprise,
     produits: esp.produits,
     devis: esp.devis.map(sansLien),
@@ -47,8 +52,8 @@ export function vueApp(esp, appareil) {
       appareils: (esp.appareils || []).map((a) => ({ ...a, actuel: a.id === appareil?.id })).reverse(),
       journal: (esp.journal || []).slice(-30).reverse(),
     },
-    calculateur: esp.calculateur || null,
-    manques: D.manquesEntreprise(esp.entreprise),
+    calculateur: rub.facturation ? esp.calculateur || null : null,
+    manques: rub.facturation ? D.manquesEntreprise(esp.entreprise) : [],
     mail: mailPret(),
     jour: D.aujourdhuiParis(),
   };

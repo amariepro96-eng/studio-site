@@ -27,6 +27,9 @@ export default function DevisAgence({ rec, onRecord, settings }) {
   const [confirmer, setConfirmer] = useState(null); // 'couper' | 'reinitialiser' | 'supprimer'
   const [ouvert, setOuvert] = useState(false);
   const [modele, setModele] = useState('impression3d');
+  // « Site seul » (accès au site sans facturation) n'est proposable que si le client a un site en ligne
+  const aUnSite = Boolean(rec.result?.content && rec.result?.models?.some((m) => m.id === rec.choice?.modelId));
+  const [facturation, setFacturation] = useState(true);
 
   async function appel(action, body = {}) {
     setBusy(true);
@@ -74,9 +77,11 @@ export default function DevisAgence({ rec, onRecord, settings }) {
       </section>
     );
 
+  // facturation : choisi seulement à la première activation ; ensuite c'est figé
+  const rubrique = () => (a ? {} : { facturation });
   async function preparer() {
     if (email.trim() && !isEmail(email)) return setErr('Adresse e-mail du client invalide.');
-    const d = await appel('inviter', { email: email.trim() });
+    const d = await appel('inviter', { email: email.trim(), ...rubrique() });
     if (d?.lien) {
       setLien(d.lien);
       setOuvert(false);
@@ -85,7 +90,7 @@ export default function DevisAgence({ rec, onRecord, settings }) {
   }
   async function envoyer() {
     if (!isEmail(email)) return setErr('Indique l’adresse e-mail du client.');
-    const d = await appel('envoyer', { email: email.trim(), message: messageInvitation({ nom, lien: '{lien}', owner }) });
+    const d = await appel('envoyer', { email: email.trim(), ...rubrique(), message: messageInvitation({ nom, lien: '{lien}', owner }) });
     if (d?.envoye) {
       setLien(null);
       setOuvert(false);
@@ -105,9 +110,10 @@ export default function DevisAgence({ rec, onRecord, settings }) {
     if (d?.envoye) setNote(`Nouveau lien envoyé à l’adresse de son compte (${proprietaire}), valable 7 jours.`);
   }
 
+  const siteSeul = a && a.facturation === false;
   return (
     <section className="card side-card dv-agence">
-      <h2>Appli Devis & Factures</h2>
+      <h2>{siteSeul ? 'Espace client — accès au site' : 'Appli Devis & Factures'}</h2>
       {demande && !a && <p className="note small">Option demandée dans le questionnaire.</p>}
       {!a && <p className="muted small">Une appli séparée du site, installable sur iPhone et Android : le client crée ses devis depuis ses produits et ses prix, ses clients les acceptent en ligne, et chaque devis accepté devient une facture. Tu ne verras pas ses devis ni ses chiffres.</p>}
 
@@ -128,17 +134,21 @@ export default function DevisAgence({ rec, onRecord, settings }) {
               <span>{inv.utiliseeLe ? `Lien ouvert ${timeAgo(inv.utiliseeLe)}, compte pas encore terminé` : invValable ? `Invitation valable jusqu’au ${fmt(inv.exp)}, pas encore ouverte` : `Invitation du ${fmt(inv.creeLe)} expirée`}</span>
             </li>
           ) : null}
-          {compteFait && (
+          {compteFait && (siteSeul ? (
+            <li className="is-ok">
+              <span>Accès au site (sans facturation)</span>
+            </li>
+          ) : (
             <li className="is-ok">
               <span>
                 {a.nbProduits} produit{a.nbProduits > 1 ? 's' : ''} · {a.nbDevis} devis · {a.nbFactures} facture{a.nbFactures > 1 ? 's' : ''} émise{a.nbFactures > 1 ? 's' : ''}
               </span>
             </li>
-          )}
+          ))}
         </ul>
       )}
 
-      {a && (
+      {a && !siteSeul && (
         <div className="dv-ag-calc">
           <span className="q-label">Calculateur d’estimation</span>
           {a.calculateur?.actif ? (
@@ -172,6 +182,25 @@ export default function DevisAgence({ rec, onRecord, settings }) {
 
       {peutInviter && (!a || !invValable || ouvert) && (
         <div className="esp-agence-form">
+          {!a && aUnSite && (
+            <fieldset className="q-field">
+              <legend className="q-label">Quoi activer ?</legend>
+              <label className="q-toggle compact">
+                <input type="radio" name="dv-rub" checked={facturation} onChange={() => setFacturation(true)} />
+                <span>
+                  <span className="q-option-title">Devis &amp; Factures (+ accès au site)</span>
+                  <span className="q-option-hint">Le client fait ses devis et ses factures, et gère son site, derrière un seul compte.</span>
+                </span>
+              </label>
+              <label className="q-toggle compact">
+                <input type="radio" name="dv-rub" checked={!facturation} onChange={() => setFacturation(false)} />
+                <span>
+                  <span className="q-option-title">Accès au site seul</span>
+                  <span className="q-option-hint">Juste modifier et publier son site, derrière un compte (mot de passe + code). Sans facturation.</span>
+                </span>
+              </label>
+            </fieldset>
+          )}
           <div className="q-field">
             <label className="q-label" htmlFor="dv-ag-email">
               E-mail du client
