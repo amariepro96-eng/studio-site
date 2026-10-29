@@ -113,7 +113,7 @@ export default function DevisAgence({ rec, onRecord, settings }) {
   const siteSeul = a && a.facturation === false;
   return (
     <section className="card side-card dv-agence">
-      <h2>{siteSeul ? 'Espace client — accès au site' : 'Appli Devis & Factures'}</h2>
+      <h2>{siteSeul ? 'Espace client — modification du site' : 'Appli Devis & Factures'}</h2>
       {demande && !a && <p className="note small">Option demandée dans le questionnaire.</p>}
       {!a && <p className="muted small">Une appli séparée du site, installable sur iPhone et Android : le client crée ses devis depuis ses produits et ses prix, ses clients les acceptent en ligne, et chaque devis accepté devient une facture. Tu ne verras pas ses devis ni ses chiffres.</p>}
 
@@ -136,7 +136,7 @@ export default function DevisAgence({ rec, onRecord, settings }) {
           ) : null}
           {compteFait && (siteSeul ? (
             <li className="is-ok">
-              <span>Accès au site (sans facturation)</span>
+              <span>Modification du site (sans facturation)</span>
             </li>
           ) : (
             <li className="is-ok">
@@ -186,17 +186,17 @@ export default function DevisAgence({ rec, onRecord, settings }) {
             <fieldset className="q-field">
               <legend className="q-label">Quoi activer ?</legend>
               <label className="q-toggle compact">
-                <input type="radio" name="dv-rub" checked={facturation} onChange={() => setFacturation(true)} />
+                <input type="radio" name="dv-rub" checked={!facturation} onChange={() => setFacturation(false)} />
                 <span>
-                  <span className="q-option-title">Devis &amp; Factures (+ accès au site)</span>
-                  <span className="q-option-hint">Le client fait ses devis et ses factures, et gère son site, derrière un seul compte.</span>
+                  <span className="q-option-title">Modifier son site</span>
+                  <span className="q-option-hint">Il change lui-même ses horaires, prix, photos et annonces, et publie. Derrière un compte sécurisé (mot de passe + code).</span>
                 </span>
               </label>
               <label className="q-toggle compact">
-                <input type="radio" name="dv-rub" checked={!facturation} onChange={() => setFacturation(false)} />
+                <input type="radio" name="dv-rub" checked={facturation} onChange={() => setFacturation(true)} />
                 <span>
-                  <span className="q-option-title">Accès au site seul</span>
-                  <span className="q-option-hint">Juste modifier et publier son site, derrière un compte (mot de passe + code). Sans facturation.</span>
+                  <span className="q-option-title">Modifier son site + Devis &amp; Factures</span>
+                  <span className="q-option-hint">Tout ça, plus : créer des devis, les faire accepter en ligne et les transformer en factures.</span>
                 </span>
               </label>
             </fieldset>

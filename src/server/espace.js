@@ -245,7 +245,8 @@ export function vueEspace(rec, { role, appareil = null, settings }) {
     appareils: e.appareils.map(({ h, ...a }) => ({ ...a, actuel: Boolean(appareil && a.id === appareil.id) })).reverse(),
     journal: [...e.journal].reverse().slice(0, 40),
     email: e.email,
-    aDevis: role === 'client' && Boolean(rec.appliDevis?.wid) && rec.appliDevis?.facturation !== false, // lien retour vers le portail (pas pour un compte « site seul »)
+    aDevis: role === 'client' && Boolean(rec.appliDevis?.wid) && rec.appliDevis?.facturation !== false, // lien retour « Devis & Factures »
+    aCompte: role === 'client' && Boolean(rec.appliDevis?.wid) && rec.appliDevis?.facturation === false, // compte « site seul » : lien « Mon compte »
     invitation: role === 'agence' ? e.invitation : null,
     publicationsDuJour: publicationsDuJour(e),
     limite: LIMITE_JOUR,

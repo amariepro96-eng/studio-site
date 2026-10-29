@@ -646,6 +646,11 @@ export default function EspaceApp({ id, vueAgence = false }) {
               Devis &amp; Factures
             </a>
           )}
+          {client && srv.aCompte && (
+            <a className="btn-text small" href="/devis#reglages">
+              Mon compte
+            </a>
+          )}
           {!client && (
             <a className="btn-text small" href={`/agence/clients/${id}`}>
               Retour au dossier

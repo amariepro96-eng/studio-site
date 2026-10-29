@@ -31,22 +31,27 @@ function Icone({ nom }) {
   );
 }
 
-// Accueil d'un compte « site seul » : un seul geste, ouvrir le site. Le reste (mot de passe,
-// code, appareils) est dans « Mon compte ».
+// Compte « site seul » : on va droit à la modification du site. Cet écran n'est que le court
+// temps d'ouverture (site en ligne) ou le message d'attente (site pas encore publié).
 function AccueilSite({ data, versSite, ouvrir }) {
-  const dispo = Boolean(data.site?.disponible);
+  if (data.site?.disponible) {
+    return (
+      <section className="dv-page dv-accueil">
+        <p className="muted">Ouverture de la modification de votre site…</p>
+        <button type="button" className="btn-text small" onClick={ouvrir} disabled={versSite}>
+          {versSite ? 'Ouverture…' : 'Ouvrir maintenant'}
+        </button>
+      </section>
+    );
+  }
   return (
     <section className="dv-page dv-accueil">
       <div className="dv-page-tete">
         <h1>Mon espace</h1>
       </div>
       <div className="card dv-accueil-carte">
-        <h2>Mon site</h2>
-        <p className="muted">Modifiez vos horaires, vos prix, vos photos et vos annonces, puis publiez votre site.</p>
-        <button type="button" className="btn primary" disabled={!dispo || versSite} onClick={ouvrir}>
-          {versSite ? 'Ouverture…' : 'Ouvrir mon site'}
-        </button>
-        {!dispo && <p className="muted small">Votre site n’est pas encore en ligne : votre prestataire le publiera bientôt.</p>}
+        <h2>Modification du site</h2>
+        <p className="muted">Votre site n’est pas encore en ligne : votre prestataire le publiera bientôt. Vous pourrez alors le modifier ici (horaires, prix, photos, annonces).</p>
       </div>
       <p className="muted small">Votre mot de passe, le code du téléphone et vos appareils : onglet « Mon compte ».</p>
     </section>
@@ -147,6 +152,15 @@ export default function DevisApp() {
     }
   }, []);
 
+  // Compte « site seul » : on va droit à la modification du site (pas d'écran intermédiaire).
+  // L'onglet « Mon compte » reste joignable via /devis#reglages, qui ne redirige pas.
+  useEffect(() => {
+    if (!data || versSite) return;
+    const fact = data.rubriques?.facturation !== false;
+    const hash = (typeof window !== 'undefined' ? window.location.hash : '').replace('#', '');
+    if (!fact && data.site?.disponible && hash !== 'reglages') ouvrirMonSite(data.site.id);
+  }, [data, versSite, ouvrirMonSite]);
+
   const agir = useCallback(async (body) => {
     try {
       const d = await api('/api/devis', { method: 'POST', body });
@@ -196,9 +210,9 @@ export default function DevisApp() {
   const nbRepondus = facturation ? data.devis.filter((d) => ['modification'].includes(d.statut)).length : 0;
   const nbAEmettre = facturation ? data.factures.filter((f) => f.statut === 'a_emettre').length + data.factures.filter((f) => statutFacture(f, jour) === 'retard').length : 0;
   const badges = facturation ? { devis: nbRepondus, factures: nbAEmettre, reglages: data.manques.length ? '!' : 0 } : {};
-  const onglets = facturation ? ONGLETS : [['accueil', 'Accueil'], ['reglages', 'Mon compte']];
+  const onglets = facturation ? ONGLETS : [['reglages', 'Mon compte']];
   const onglet = facturation ? nav.onglet : nav.onglet === 'reglages' ? 'reglages' : 'accueil';
-  const siteLanceur = facturation && data.site?.disponible;
+  const siteLanceur = Boolean(data.site?.disponible);
   const props = { data, agir, nav, aller, garde, setToast, recharger: charger };
 
   return (

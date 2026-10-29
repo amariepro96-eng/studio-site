@@ -7025,3 +7025,35 @@ fieldset.dv-bloc legend + * {
   width: auto;
   flex: 1 1 180px;
 }
+
+/* Bac à sable de l'atelier */
+.banner:has(.bac-sable) {
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+.bac-sable {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  padding: 12px 16px;
+  margin: 0 0 14px;
+  background: var(--accent-soft, #eaf1ed);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.bac-sable-txt {
+  font-size: 0.9rem;
+  max-width: 64ch;
+}
+.bac-sable-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.bac-warn {
+  margin: 0 0 10px;
+}

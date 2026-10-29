@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import App from './App.jsx';
 import { AgencyBar } from './Chrome.jsx';
+import BacASable from './agency/BacASable.jsx';
 import { apiRunner, apiImages } from '../ai/generate.js';
 import { apiImageGen } from '../ai/images.js';
 
@@ -35,9 +36,15 @@ export default function NextShell({ mode, studioName }) {
       </div>
     );
   }
-  const banner = status.ai ? null : mode === 'agence' ? (
-    <>
+  const aiWarn = !status.ai ? (
+    <p className="bac-warn">
       <strong>Mode démo.</strong> Aucune clé API n’est configurée : les modèles utiliseront des textes génériques. Ajoutez <code>ANTHROPIC_API_KEY</code> dans les réglages Vercel pour des textes rédigés par l’IA.
+    </p>
+  ) : null;
+  const banner = mode === 'agence' ? (
+    <>
+      {aiWarn}
+      <BacASable />
     </>
   ) : null;
   const header = mode === 'agence' ? <AgencyBar studioName={studioName || APP_NAME} current="atelier" /> : undefined;
