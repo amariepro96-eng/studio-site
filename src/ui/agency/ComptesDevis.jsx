@@ -212,6 +212,9 @@ export default function ComptesDevis({ studioName }) {
             <h1>Comptes Devis & Factures</h1>
             <p className="muted">L’appli Devis & Factures de tes clients : l’état de chaque accès, et de quoi le suspendre, le réinitialiser ou le supprimer. Les mots de passe ne sont jamais visibles, ni par toi ni par Studio Site : ils sont enregistrés sous une forme chiffrée qu’on ne peut pas relire. Tu ne vois pas non plus leurs devis, leurs factures ni leurs prix.</p>
           </div>
+          <a className="btn secondary" href="/devis" target="_blank" rel="noopener noreferrer">
+            Ouvrir l’appli
+          </a>
         </div>
         {err && (
           <div className="alert" role="alert">

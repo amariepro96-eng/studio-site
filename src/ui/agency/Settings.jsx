@@ -114,9 +114,15 @@ export default function Settings({ studioName }) {
           <section className="card settings cd-reglage" aria-labelledby="cd-titre">
             <h2 id="cd-titre">Comptes Devis & Factures</h2>
             <p className="muted small">Les comptes de l’appli Devis & Factures de tes clients : état de chaque accès, suspension, réinitialisation, suppression. Les mots de passe ne sont jamais visibles.</p>
-            <a className="btn secondary" href="/agence/devis">
-              Gérer les comptes
-            </a>
+            <div className="row-actions">
+              <a className="btn secondary" href="/agence/devis">
+                Gérer les comptes
+              </a>
+              <a className="btn secondary" href="/devis" target="_blank" rel="noopener noreferrer">
+                Ouvrir l’appli
+              </a>
+            </div>
+            <p className="q-hint">« Ouvrir l’appli » ouvre l’écran de connexion de l’appli (ton compte de démo, ou le tien) dans un nouvel onglet. Les comptes de tes clients restent protégés par leur mot de passe et leur code.</p>
           </section>
         )}
       </main>
