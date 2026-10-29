@@ -37,6 +37,12 @@ export default function Settings({ studioName }) {
       .then((d) => setStorage(d.storage))
       .catch(() => {});
   }, []);
+  // Arrivée depuis l'Accueil (« Modifier les frais fixes ») : aller directement au bloc
+  const pret = Boolean(s);
+  useEffect(() => {
+    if (!pret || window.location.hash !== '#frais-fixes') return;
+    document.getElementById('frais-fixes')?.scrollIntoView({ block: 'start' });
+  }, [pret]);
   async function submit(e) {
     e.preventDefault();
     setBusy(true);
@@ -173,7 +179,8 @@ function PublishSettings({ pub, value, onChange }) {
   );
 }
 
-// Charges mensuelles de l'agence : déduites des abonnements dans le suivi financier
+// Frais fixes mensuels de l'agence : l'Accueil en tire le bénéfice et le point mort,
+// le suivi financier les déduit des abonnements (marge estimée)
 const EXEMPLES = ['Vercel Pro', 'Abonnement Claude', 'Images Gemini', 'Brevo', 'Google Workspace'];
 function Charges({ value, onChange }) {
   const [lignes, setLignes] = useState(() => value.map((c) => ({ id: c.id, libelle: c.libelle, saisie: versSaisie(c.montant) })));
@@ -192,19 +199,19 @@ function Charges({ value, onChange }) {
   }
   const total = value.reduce((t, c) => t + (c.montant || 0), 0);
   return (
-    <div className="q-field charges">
-      <span className="q-label">Charges mensuelles de l’agence</span>
-      <p className="q-hint">Ce que l’activité te coûte chaque mois (hébergement, abonnements, outils). Le suivi financier les déduit des abonnements de tes clients pour estimer ta marge.</p>
+    <div className="q-field charges" id="frais-fixes">
+      <span className="q-label">Frais fixes mensuels</span>
+      <p className="q-hint">Ce que l’activité te coûte chaque mois, hors taxes (hébergement, abonnements, outils). L’Accueil s’en sert pour calculer ton bénéfice et ton point mort.</p>
       {lignes.length > 0 && (
         <ul className="charges-list">
           {lignes.map((l, i) => (
             <li key={l.id}>
-              <input type="text" aria-label="Libellé de la charge" placeholder={EXEMPLES[i % EXEMPLES.length]} value={l.libelle} onChange={(e) => maj(lignes.map((x) => (x.id === l.id ? { ...x, libelle: e.target.value } : x)))} />
+              <input type="text" aria-label="Libellé du frais fixe" placeholder={EXEMPLES[i % EXEMPLES.length]} value={l.libelle} onChange={(e) => maj(lignes.map((x) => (x.id === l.id ? { ...x, libelle: e.target.value } : x)))} />
               <span className="euro-input">
                 <input type="text" inputMode="decimal" aria-label="Montant par mois en euros" placeholder="0" value={l.saisie} aria-invalid={erreurs[l.id] || undefined} onChange={(e) => maj(lignes.map((x) => (x.id === l.id ? { ...x, saisie: e.target.value } : x)))} />
                 <span aria-hidden="true">€/mois</span>
               </span>
-              <button type="button" className="icon-btn small" aria-label={`Retirer ${l.libelle || 'cette charge'}`} onClick={() => maj(lignes.filter((x) => x.id !== l.id))}>
+              <button type="button" className="icon-btn small" aria-label={`Retirer ${l.libelle || 'ce frais fixe'}`} onClick={() => maj(lignes.filter((x) => x.id !== l.id))}>
                 ×
               </button>
             </li>
@@ -214,7 +221,7 @@ function Charges({ value, onChange }) {
       {Object.keys(erreurs).length > 0 && <p className="q-error">Montant illisible : écris par exemple 20 ou 19,90.</p>}
       <div className="row-actions">
         <button type="button" className="btn secondary small" onClick={() => maj([...lignes, { id: nouvelId(), libelle: '', saisie: '' }])}>
-          Ajouter une charge
+          Ajouter un frais fixe
         </button>
         {total > 0 && <span className="muted small">Total : {euros(total)} par mois</span>}
       </div>

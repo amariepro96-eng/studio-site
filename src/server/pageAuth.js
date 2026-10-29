@@ -10,10 +10,13 @@ export async function agencyAccess() {
   const store = await cookies();
   const allowed = await sessionValide(store.get('agence')?.value);
   let studioName = process.env.NEXT_PUBLIC_APP_NAME || 'Studio Site';
+  let ownerName = '';
   if (allowed) {
     try {
-      studioName = (await getSettings()).studioName || studioName;
+      const s = await getSettings();
+      studioName = s.studioName || studioName;
+      ownerName = s.ownerName || '';
     } catch {}
   }
-  return { allowed, open: !agencyPassword, noPassword: !agencyPassword, studioName };
+  return { allowed, open: !agencyPassword, noPassword: !agencyPassword, studioName, ownerName };
 }

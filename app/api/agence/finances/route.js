@@ -18,7 +18,7 @@ export const GET = route(
       facturation: c.facturation || facturationVide(),
     }));
     const jour = aujourdhuiParis();
-    return ok({ storage: storageMode(), jour, resume: resumeFinances(liste, settings.charges || [], jour), clients: liste.sort((a, b) => a.nom.localeCompare(b.nom, 'fr')), charges: settings.charges || [] });
+    return ok({ storage: storageMode(), jour, resume: resumeFinances(liste, settings.charges || [], jour, settings.fraisFixesHisto || []), clients: liste.sort((a, b) => a.nom.localeCompare(b.nom, 'fr')), charges: settings.charges || [] });
   },
   { agency: true }
 );

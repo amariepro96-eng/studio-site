@@ -6,7 +6,8 @@
 //     abonnement: { montant, debut: 'AAAA-MM', fin: 'AAAA-MM' | '', payes: [{ mois: 'AAAA-MM', le: 'AAAA-MM-JJ' }] },
 //     factures:   [{ id, libelle, montant, echeance: 'AAAA-MM-JJ', payeeLe: 'AAAA-MM-JJ' | '' }],
 //   }
-// Dans les réglages : charges = [{ id, libelle, montant }] (montant par mois)
+// Dans les réglages : charges = [{ id, libelle, montant }] (frais fixes, montant HT par mois)
+//                    fraisFixesHisto = [{ mois: 'AAAA-MM', montant }] (total des frais fixes à partir de ce mois)
 
 const MOIS_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 const JOUR_RE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
@@ -132,6 +133,43 @@ export function nettoyerCharges(raw) {
   return out;
 }
 
+export const totalCharges = (charges) => (Array.isArray(charges) ? charges : []).reduce((s, x) => s + (Number(x?.montant) || 0), 0);
+
+// ---------- Historique des frais fixes ----------
+// Le total d'un mois est celui de la dernière entrée dont le mois est ≤ ce mois : changer ses frais
+// fixes en novembre ne réécrit pas le bénéfice d'octobre.
+export const DEBUT_HISTO = '2000-01';
+export function nettoyerHisto(raw) {
+  const parMois = new Map();
+  for (const h of Array.isArray(raw) ? raw : []) if (moisValide(h?.mois)) parMois.set(h.mois, centimes(h.montant));
+  return [...parMois.entries()]
+    .map(([mois, montant]) => ({ mois, montant }))
+    .sort((a, b) => a.mois.localeCompare(b.mois))
+    .slice(-240);
+}
+export function fraisFixesDu(histo, mois, defaut = 0) {
+  if (!histo?.length) return defaut;
+  let v = histo[0].montant; // avant le premier enregistrement : la plus ancienne valeur connue
+  for (const h of histo) {
+    if (h.mois > mois) break;
+    v = h.montant;
+  }
+  return v;
+}
+// À l'enregistrement des réglages : note le nouveau total à partir du mois en cours
+export function majHistoFraisFixes(histo, ancienTotal, nouveauTotal, mois) {
+  let h = nettoyerHisto(histo);
+  if (!h.length) {
+    if (ancienTotal === nouveauTotal) return h;
+    // Première saisie (rien avant) : elle vaut aussi pour les mois passés.
+    // Sinon, l'ancien total reste celui des mois d'avant.
+    if (ancienTotal > 0) h = [{ mois: DEBUT_HISTO, montant: centimes(ancienTotal) }];
+  }
+  h = h.filter((x) => x.mois !== mois);
+  if (fraisFixesDu(h, mois, ancienTotal) !== nouveauTotal) h.push({ mois, montant: centimes(nouveauTotal) });
+  return nettoyerHisto(h);
+}
+
 export const facturationVide = () => ({ abonnement: { montant: 0, debut: '', fin: '', payes: [] }, factures: [], note: '' });
 
 // ---------- Calculs pour un client ----------
@@ -179,7 +217,7 @@ export function etatClient(fact, jour) {
 
 // ---------- Synthèse de l'agence ----------
 // clients : [{ id, nom, formule, facturation }]
-export function resumeFinances(clients, charges, jour) {
+export function resumeFinances(clients, charges, jour, histo = []) {
   const mois = moisDe(jour);
   const annee = jour.slice(0, 4);
   const derniers = [];
@@ -191,11 +229,13 @@ export function resumeFinances(clients, charges, jour) {
   const retard = [];
   const attente = [];
   const lignesClients = [];
+  const parJour = new Map(derniers.map((m) => [m, []])); // encaissements datés, pour le point mort
   for (const c of clients) {
     const e = etatClient(c.facturation, jour);
     mrr += e.mensuel;
     for (const x of e.encaisse) {
       const m = moisDe(x.date);
+      if (parJour.has(m)) parJour.get(m).push(x);
       if (parMois.has(m)) parMois.set(m, parMois.get(m) + x.montant);
       if (m === mois) encaisseMois += x.montant;
       if (x.date.slice(0, 4) === annee) encaisseAnnee += x.montant;
@@ -206,7 +246,22 @@ export function resumeFinances(clients, charges, jour) {
     if (c.facturation && (ab.montant > 0 || (c.facturation.factures || []).length))
       lignesClients.push({ id: c.id, nom: c.nom, formule: c.formule || '', mensuel: e.mensuel, abonnement: ab.montant || 0, depuis: ab.debut || '', fin: ab.fin || '', retard: e.retard.total, attente: e.attente.total });
   }
-  const chargesMensuelles = (charges || []).reduce((s, x) => s + (x.montant || 0), 0);
+  const chargesMensuelles = totalCharges(charges);
+  const histoPropre = nettoyerHisto(histo);
+  // Tableau de l'Accueil : mois en cours et les deux précédents
+  const tableau = [mois, moisPrecedent(mois), moisPrecedent(moisPrecedent(mois))].map((m) => {
+    const fraisFixes = m === mois ? chargesMensuelles : fraisFixesDu(histoPropre, m, chargesMensuelles);
+    const entrees = (parJour.get(m) || []).slice().sort((a, b) => a.date.localeCompare(b.date));
+    const encaisse = entrees.reduce((t, x) => t + x.montant, 0);
+    let pointMort;
+    if (fraisFixes <= 0) pointMort = { etat: 'sans' };
+    else {
+      let cumul = 0;
+      const atteint = entrees.find((x) => (cumul += x.montant) >= fraisFixes);
+      pointMort = atteint ? { etat: 'atteint', le: atteint.date } : { etat: m === mois ? 'en-cours' : 'manque', manque: fraisFixes - encaisse };
+    }
+    return { mois: m, enCours: m === mois, encaisse, fraisFixes, benefice: encaisse - fraisFixes, pointMort };
+  });
   const tri = (a, b) => String(a.mois || a.echeance || '').localeCompare(String(b.mois || b.echeance || ''));
   lignesClients.sort((a, b) => b.retard - a.retard || b.mensuel - a.mensuel || a.nom.localeCompare(b.nom));
   return {
@@ -222,5 +277,22 @@ export function resumeFinances(clients, charges, jour) {
     parMois: derniers.map((m) => ({ mois: m, montant: parMois.get(m) })),
     clients: lignesClients,
     abonnes: lignesClients.filter((c) => c.mensuel > 0).length,
+    tableau,
+    recurrent: recurrent(mrr, chargesMensuelles, lignesClients.filter((c) => c.mensuel > 0).length),
+  };
+}
+
+// Point mort des abonnements : combien d'abonnements pour couvrir les frais fixes chaque mois
+export function recurrent(abonnements, fraisFixes, abonnes) {
+  const ecart = abonnements - fraisFixes;
+  const moyen = abonnes > 0 ? Math.round(abonnements / abonnes) : 0;
+  return {
+    abonnements,
+    fraisFixes,
+    ecart,
+    abonnes,
+    moyen,
+    manquants: ecart < 0 && moyen > 0 ? Math.ceil(-ecart / moyen) : 0,
+    couverture: fraisFixes > 0 ? Math.floor((abonnements * 100) / fraisFixes) : null,
   };
 }

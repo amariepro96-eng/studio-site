@@ -36,7 +36,7 @@ export default function Alertes({ value, onChange, emailEnregistre }) {
     <div className="q-field pub-settings">
       <span className="q-label">Alertes par e-mail</span>
       <p className="q-hint">
-        Toutes les {etat?.intervalle || 5} minutes, Studio Site revérifie seul tous les sites, même quand le Pilotage est fermé. Si un site tombe en panne (plus visible pour les visiteurs), tu reçois un e-mail à ton <strong>E-mail de contact</strong>, puis un autre quand c’est réglé.
+        Toutes les {etat?.intervalle || 5} minutes, Studio Site revérifie seul tous les sites, même quand l’appli est fermée. Si un site tombe en panne (plus visible pour les visiteurs), tu reçois un e-mail à ton <strong>E-mail de contact</strong>, puis un autre quand c’est réglé.
       </p>
       <ul className="pub-checks">
         <li className={sansAdresse ? 'is-ko' : 'is-ok'}>
@@ -67,7 +67,7 @@ export default function Alertes({ value, onChange, emailEnregistre }) {
         <input type="checkbox" checked={value} onChange={(e) => onChange(e.target.checked)} />
         <span>
           <span className="q-option-title">M’envoyer un e-mail quand un site tombe en panne</span>
-          <span className="q-option-hint">Décoche puis Enregistrer pour les couper (vacances, essais). Le Pilotage continue de tout afficher.</span>
+          <span className="q-option-hint">Décoche puis Enregistrer pour les couper (vacances, essais). L’onglet Contrôle continue de tout afficher.</span>
         </span>
       </label>
       <div className="row-actions">

@@ -9,7 +9,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { nettoyerCharges } from '../engine/finances.js';
+import { nettoyerCharges, totalCharges, majHistoFraisFixes, moisDe, aujourdhuiParis } from '../engine/finances.js';
 
 export class StoreError extends Error {
   constructor(message, code, status = 500) {
@@ -281,8 +281,10 @@ export const DEFAULT_SETTINGS = {
   hosting: DEFAULT_HOSTING,
   // Mise en ligne automatique (GitHub + Vercel) : coupée tant que tu ne l'actives pas
   autoPublish: false,
-  // Charges mensuelles de l'agence (suivi financier) : [{ id, libelle, montant en centimes }]
+  // Frais fixes mensuels de l'agence (Accueil, suivi financier) : [{ id, libelle, montant en centimes }]
   charges: [],
+  // Total des frais fixes mois par mois (rempli à l'enregistrement, jamais modifiable depuis le navigateur)
+  fraisFixesHisto: [],
   // E-mail quand un site tombe en panne (surveillance automatique toutes les 5 minutes)
   alertesEmail: true,
 };
@@ -298,7 +300,11 @@ export async function saveSettings(input) {
   for (const k of Object.keys(DEFAULT_SETTINGS)) if (typeof DEFAULT_SETTINGS[k] === 'string' && typeof input?.[k] === 'string') s[k] = input[k].slice(0, 300).trim();
   if (typeof input?.autoPublish === 'boolean') s.autoPublish = input.autoPublish;
   if (typeof input?.alertesEmail === 'boolean') s.alertesEmail = input.alertesEmail;
-  if (Array.isArray(input?.charges)) s.charges = nettoyerCharges(input.charges);
+  if (Array.isArray(input?.charges)) {
+    const avant = totalCharges(s.charges);
+    s.charges = nettoyerCharges(input.charges);
+    s.fraisFixesHisto = majHistoFraisFixes(s.fraisFixesHisto, avant, totalCharges(s.charges), moisDe(aujourdhuiParis()));
+  }
   if (!s.studioName) s.studioName = DEFAULT_SETTINGS.studioName;
   if (!s.ownerName) s.ownerName = DEFAULT_SETTINGS.ownerName;
   await writeRaw('settings.json', JSON.stringify(s), { contentType: 'application/json' });

@@ -647,8 +647,8 @@ export default function EspaceApp({ id, vueAgence = false }) {
             </a>
           )}
           {!client && (
-            <a className="btn-text small" href="/pilotage">
-              Pilotage
+            <a className="btn-text small" href="/controle">
+              Contrôle
             </a>
           )}
         </div>

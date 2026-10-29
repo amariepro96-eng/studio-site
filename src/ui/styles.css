@@ -3751,7 +3751,7 @@ body {
   }
 }
 
-/* ---------- Pilotage ---------- */
+/* ---------- Contrôle (ex-Pilotage) ---------- */
 .pilot-app {
   -webkit-tap-highlight-color: transparent;
 }
@@ -3838,7 +3838,7 @@ body {
   border-color: #efc6bf;
 }
 
-/* Modules du haut : finances et activité */
+/* Modules : finances et activité */
 .pilot-modules {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
@@ -5187,19 +5187,302 @@ body {
   min-width: 0;
 }
 
-/* Sur téléphone, l'activité récente passe sous les sites */
-.journal-haut,
-.journal-haut > .module {
+
+#frais-fixes {
+  scroll-margin-top: 76px;
+}
+
+/* ---------- Accueil ---------- */
+.accueil {
+  padding-bottom: 80px;
+}
+.accueil-grille {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.12fr);
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .accueil-grille {
+    grid-template-columns: 1fr;
+  }
+}
+.accueil-module {
+  gap: 14px;
+  padding: 20px 22px;
+}
+.ss .accueil-module h2.module-titre {
+  margin: 0;
+  font-size: 1.08rem;
+}
+.accueil-phrase {
+  margin: 0;
+  font-weight: 550;
+}
+.accueil-phrase.ko {
+  color: var(--danger);
+}
+.compteurs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+/* Trois par ligne (problèmes d'abord), les deux derniers se partagent la seconde ligne */
+.compteur {
+  flex: 1 1 calc(33.333% - 6px);
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  padding: 10px 11px 9px;
+  border-radius: var(--radius-sm);
+  background: var(--sunken);
+  min-width: 0;
+}
+.compteur-n {
+  font-size: 1.5rem;
+  font-weight: 650;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.compteur-label {
+  font-size: 0.76rem;
+  font-weight: 550;
+  color: var(--muted);
+}
+.compteur.zero .compteur-n {
+  color: var(--line-strong);
+}
+.compteur.etat-panne:not(.zero) {
+  background: var(--danger-soft);
+}
+.compteur.etat-panne:not(.zero) .compteur-n,
+.compteur.etat-panne:not(.zero) .compteur-label {
+  color: #8a2c22;
+}
+.compteur.etat-attention:not(.zero),
+.compteur.etat-action:not(.zero) {
+  background: var(--saffron-soft);
+}
+.compteur.etat-attention:not(.zero) .compteur-n,
+.compteur.etat-action:not(.zero) .compteur-n,
+.compteur.etat-attention:not(.zero) .compteur-label,
+.compteur.etat-action:not(.zero) .compteur-label {
+  color: var(--saffron-ink);
+}
+.compteur.etat-ok:not(.zero) {
+  background: #e3f1e9;
+}
+.compteur.etat-ok:not(.zero) .compteur-n,
+.compteur.etat-ok:not(.zero) .compteur-label {
+  color: #17573a;
+}
+.accueil-liste {
+  list-style: none;
+  margin: 0;
+  padding: 0;
   display: grid;
 }
-.journal-bas {
-  display: none;
+.ss a.accueil-ligne {
+  display: grid;
+  grid-template-columns: 6.9rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+  color: var(--ink);
+  text-decoration: none;
 }
-@media (max-width: 860px) {
-  .journal-haut {
+.accueil-liste li:first-child .accueil-ligne {
+  border-top: 0;
+  padding-top: 2px;
+}
+.accueil-ligne .etat-pill {
+  justify-self: start;
+}
+.accueil-ligne-texte {
+  display: grid;
+  min-width: 0;
+  font-size: 0.92rem;
+  line-height: 1.35;
+}
+.accueil-ligne-texte .muted {
+  font-size: 0.85rem;
+}
+.ss a.accueil-ligne:hover strong {
+  text-decoration: underline;
+}
+.accueil-chevron {
+  color: var(--muted);
+  font-size: 1.3rem;
+  line-height: 1;
+}
+.accueil-ok {
+  margin: 0;
+  color: var(--ok);
+  font-weight: 550;
+  font-size: 0.92rem;
+}
+.accueil-pied {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.accueil-direct.ko {
+  color: var(--danger);
+}
+.fin-table-cadre {
+  overflow-x: auto;
+}
+.fin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+  font-variant-numeric: tabular-nums;
+}
+.fin-table th,
+.fin-table td {
+  padding: 9px 8px;
+  text-align: right;
+  vertical-align: top;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+.fin-table th:first-child,
+.fin-table td:first-child {
+  padding-left: 0;
+}
+.fin-table th:last-child,
+.fin-table td:last-child {
+  padding-right: 0;
+}
+.fin-table th[scope='row'] {
+  text-align: left;
+  font-weight: 550;
+  white-space: normal;
+}
+.fin-table thead th {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+  border-bottom-color: var(--line-strong);
+}
+.fin-table thead th.en-cours {
+  color: var(--ink);
+}
+.fin-table thead th small {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+.fin-table .ligne-benefice th,
+.fin-table .ligne-benefice td {
+  font-weight: 650;
+  font-size: 1rem;
+}
+.fin-table td.pos {
+  color: var(--ok);
+}
+.fin-table td.neg {
+  color: var(--danger);
+}
+.fin-table tbody tr:last-child th,
+.fin-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+.fin-table .pm-etat {
+  display: block;
+  font-weight: 600;
+  font-size: 0.86rem;
+}
+.fin-table .pm-detail {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.fin-table .pm-ok .pm-etat {
+  color: var(--ok);
+}
+.fin-table .pm-ko .pm-etat {
+  color: var(--danger);
+}
+.fin-table .pm-encours .pm-etat {
+  color: var(--saffron-ink);
+}
+/* Sur téléphone : le mois en cours et le précédent (les trois mois sur ordinateur) */
+@media (max-width: 440px) {
+  .fin-table tr > :nth-child(4) {
     display: none;
   }
-  .journal-bas {
-    display: block;
+  .fin-table tr > :nth-child(3) {
+    padding-right: 0;
+  }
+}
+@media (max-width: 420px) {
+  .fin-table {
+    font-size: 0.84rem;
+  }
+  .fin-table th,
+  .fin-table td {
+    padding: 8px 5px;
+  }
+  .fin-table th[scope='row'] {
+    width: 30%;
+  }
+}
+.accueil-recurrent {
+  margin: 0;
+  padding: 11px 13px;
+  border-radius: var(--radius-sm);
+  background: var(--saffron-soft);
+  color: var(--saffron-ink);
+  font-size: 0.9rem;
+}
+.accueil-recurrent.ok {
+  background: #e3f1e9;
+  color: #17573a;
+}
+.accueil-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.accueil-note {
+  margin: 0;
+}
+
+.pilot-modules-bas {
+  align-items: start;
+}
+/* Barre de l'espace agence sur téléphone : Accueil, Contrôle, Clients, Réglages */
+@media (max-width: 640px) {
+  .ss .app-nav a {
+    padding: 0 8px;
+    font-size: 0.88rem;
+  }
+}
+@media (max-width: 380px) {
+  .app-header {
+    gap: 8px;
+  }
+  .ss .app-nav {
+    gap: 0;
+  }
+  .ss .app-nav a {
+    padding: 0 6px;
+    font-size: 0.86rem;
+  }
+}
+@media (max-width: 560px) {
+  .app-header .brand-name {
+    display: none;
   }
 }

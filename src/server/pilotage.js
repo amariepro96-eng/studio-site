@@ -1,4 +1,4 @@
-// Pilotage : état réel de chaque site client, vérifié à la demande (toutes les 30 s quand la page
+// Onglet Contrôle (ex-Pilotage) : état réel de chaque site client, vérifié à la demande (toutes les 30 s quand la page
 // est ouverte) : réponse du site, cadenas HTTPS, dernière mise en ligne Vercel, domaine, demandes
 // de l'espace client, rangement Google Drive. Chaque problème est expliqué en clair (bulle).
 //
@@ -282,7 +282,7 @@ function problemeAcces(f, s, { domaine, provisoireOk }) {
       resume: s.code === 'redirections' ? 'Le site renvoie vers lui-même en boucle.' : 'L’adresse enregistrée dans le dossier n’est pas une adresse publique.',
       quoi: s.code === 'redirections' ? 'La page d’accueil redirige sans fin vers une autre adresse : les navigateurs abandonnent.' : 'Studio Site ne vérifie que des adresses publiques (https://…).',
       pourquoi: s.code === 'redirections' ? ['Redirection mal réglée dans Vercel › Settings › Domains (le domaine et www renvoient l’un vers l’autre).'] : ['Adresse mal saisie dans le dossier.'],
-      consequence: s.code === 'redirections' ? 'Les visiteurs voient « Trop de redirections ».' : 'Le pilotage ne peut pas surveiller ce site.',
+      consequence: s.code === 'redirections' ? 'Les visiteurs voient « Trop de redirections ».' : 'Studio Site ne peut pas surveiller ce site.',
       etapes: s.code === 'redirections' ? ['Dans Vercel › projet du site › Settings › Domains : le domaine principal ne doit pas rediriger, seul www redirige vers lui.'] : ['Corrige l’adresse du site dans le dossier.'],
     };
   return {
@@ -507,7 +507,7 @@ async function calculer(force) {
   let teamId = '';
   let vercelBranche = false;
   if (avecVercel && !env.vercelToken)
-    alerte = { niveau: 'attention', titre: 'Statuts Vercel indisponibles', texte: 'La clé VERCEL_PUBLISH_TOKEN est absente : le pilotage vérifie que les sites répondent, mais ne voit plus les mises en ligne ni les domaines.' };
+    alerte = { niveau: 'attention', titre: 'Statuts Vercel indisponibles', texte: 'La clé VERCEL_PUBLISH_TOKEN est absente : Studio Site vérifie que les sites répondent, mais ne voit plus les mises en ligne ni les domaines.' };
   else if (avecVercel) {
     try {
       teamId = await avecDelai(equipe(), 8000, '');
@@ -578,7 +578,8 @@ async function calculer(force) {
   const fin = resumeFinances(
     clients.map((c) => ({ id: c.id, nom: c.brief?.businessName || c.name || 'Client sans nom', formule: c.formula, facturation: c.facturation })),
     settings.charges || [],
-    jour
+    jour,
+    settings.fraisFixesHisto || []
   );
   const data = {
     verifieLe: maintenant,

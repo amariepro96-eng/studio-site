@@ -1,13 +1,10 @@
-import AgencyLogin from '../../../src/ui/AgencyLogin.jsx';
-import Finances from '../../../src/ui/pilotage/Finances.jsx';
-import { agencyAccess } from '../../../src/server/pageAuth.js';
+import { redirect } from 'next/navigation';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'Suivi financier', robots: { index: false } };
 
-export default async function FinancesPage({ searchParams }) {
-  const { allowed, studioName } = await agencyAccess();
-  if (!allowed) return <AgencyLogin />;
+// Ancienne adresse du suivi financier
+export default async function AncienSuiviFinancier({ searchParams }) {
   const sp = (await searchParams) || {};
-  return <Finances studioName={studioName} clientInitial={typeof sp.client === 'string' ? sp.client : ''} />;
+  const client = typeof sp.client === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(sp.client) ? sp.client : '';
+  redirect(client ? `/controle/finances?client=${client}` : '/controle/finances');
 }

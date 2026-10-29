@@ -1,4 +1,4 @@
-// Surveillance automatique et alertes par e-mail, même quand le Pilotage est fermé.
+// Surveillance automatique et alertes par e-mail, même quand l'appli (onglet Contrôle) est fermée.
 //
 // Vercel appelle /api/cron/pilotage toutes les 5 minutes (vercel.json). Chaque passage revérifie
 // tous les sites ; une panne confirmée (vue lors de deux vérifications, à 4 minutes d'écart au
@@ -16,7 +16,7 @@ const CONFIRMATION_MS = 4 * 60_000; // une panne doit durer au moins ça avant l
 const heure = (iso) => new Date(iso).toLocaleString('fr-FR', { timeZone: 'Europe/Paris', hour: '2-digit', minute: '2-digit' }).replace(':', ' h ');
 const jourHeure = (iso) => new Date(iso).toLocaleString('fr-FR', { timeZone: 'Europe/Paris', weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }).replace(/(\d{2}):(\d{2})$/, '$1 h $2');
 
-// Adresse de l'application, pour le lien vers le Pilotage dans l'e-mail
+// Adresse de l'application, pour le lien vers l'onglet Contrôle dans l'e-mail
 export function adresseAppli(origineRequete = '') {
   const prod = (process.env.VERCEL_PROJECT_PRODUCTION_URL || '').trim();
   if (prod) return 'https://' + prod.replace(/^https?:\/\//, '');
@@ -57,7 +57,7 @@ export function mailPanne(nouvelles, { studio, owner, lien }) {
     `Bonjour ${owner},`,
     noms.length > 1 ? `Studio Site a détecté un problème sur ${noms.length} sites de tes clients.` : `Studio Site a détecté un problème sur le site de ${noms[0]}.`,
     ...nouvelles.map(({ site, probleme }) => blocProbleme(site, probleme)),
-    `Ouvre le Pilotage pour voir les détails et revérifier :\n${lien}`,
+    `Ouvre l’onglet Contrôle pour voir les détails et revérifier :\n${lien}`,
     'Tu recevras un autre e-mail dès que ce sera réglé.',
     studio,
   ].join('\n\n');
@@ -71,7 +71,7 @@ export function mailResolu(resolues, { studio, owner, lien, maintenant = Date.no
     `Bonjour ${owner},`,
     ...resolues.map((a) => `● ${a.nom} : réglé (« ${a.titre} », constaté de ${heure(a.depuis)} à ${heure(new Date(maintenant).toISOString())}).`),
     'Rien d’autre à faire. Si ton client a été gêné, un petit mot pour le prévenir que tout est rentré dans l’ordre fait toujours plaisir (document 03, §5).',
-    `Pilotage : ${lien}`,
+    `Contrôle : ${lien}`,
     studio,
   ].join('\n\n');
   return { sujet: sujet.slice(0, 180), texte };
@@ -90,7 +90,7 @@ export async function verificationAutomatique({ origine = '', maintenant = Date.
   });
   if (!reserve) return { saute: 'recent' };
 
-  // 2. Revérifier tous les sites (met aussi à jour l'activité récente du Pilotage)
+  // 2. Revérifier tous les sites (met aussi à jour l'activité récente de l'onglet Contrôle)
   const data = await etatPilotage({ force: true });
   const settings = await getSettings();
   const pannes = new Map();
@@ -130,7 +130,7 @@ export async function verificationAutomatique({ origine = '', maintenant = Date.
   // (alertes coupées entre-temps : les pannes réglées sont simplement retirées, sans e-mail)
 
   // 4. Envoyer
-  const ctx = { studio: settings.studioName || 'Studio Site', owner: settings.ownerName || '', lien: `${adresseAppli(origine)}/pilotage`, maintenant };
+  const ctx = { studio: settings.studioName || 'Studio Site', owner: settings.ownerName || '', lien: `${adresseAppli(origine)}/controle`, maintenant };
   const erreurs = [];
   for (const [liste, faire] of [
     [nouvelles, mailPanne],
@@ -162,7 +162,7 @@ export async function verificationAutomatique({ origine = '', maintenant = Date.
 export async function mailDeTest(origine = '') {
   const settings = await getSettings();
   if (!emailValide(settings.email)) throw Object.assign(new Error('Renseigne d’abord ton « E-mail de contact » ci-dessus, puis Enregistrer.'), { code: 'no_email' });
-  const lien = `${adresseAppli(origine)}/pilotage`;
+  const lien = `${adresseAppli(origine)}/controle`;
   const pil = await getPilotage();
   const der = pil.auto?.derniereLe;
   await envoyerMail({
@@ -170,10 +170,10 @@ export async function mailDeTest(origine = '') {
     subject: `${settings.studioName || 'Studio Site'} : e-mail de test des alertes`,
     text: [
       `Bonjour ${settings.ownerName || ''},`,
-      'Ceci est un e-mail de test : les alertes du Pilotage arrivent bien jusqu’à toi.',
-      `Quand un site de tes clients tombe en panne, tu reçois un e-mail comme celui-ci en moins de 10 minutes, même si le Pilotage est fermé, puis un autre quand c’est réglé.`,
+      'Ceci est un e-mail de test : les alertes de Studio Site arrivent bien jusqu’à toi.',
+      `Quand un site de tes clients tombe en panne, tu reçois un e-mail comme celui-ci en moins de 10 minutes, même si l’appli est fermée, puis un autre quand c’est réglé.`,
       der ? `Dernière vérification automatique : ${jourHeure(der)}.` : 'La surveillance automatique démarre dans les 5 minutes qui suivent la mise en ligne de cette version.',
-      `Pilotage : ${lien}`,
+      `Contrôle : ${lien}`,
       settings.studioName || 'Studio Site',
     ].join('\n\n'),
     fromName: settings.studioName,

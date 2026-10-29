@@ -91,7 +91,7 @@ export default function Fiche({ site, onClose, onVerifier, verif, problemeOuvert
                   Dossier complet
                 </a>
               )}
-              <a className="btn secondary small" href={`/pilotage/finances?client=${site.id}`}>
+              <a className="btn secondary small" href={`/controle/finances?client=${site.id}`}>
                 Facturation
               </a>
             </div>

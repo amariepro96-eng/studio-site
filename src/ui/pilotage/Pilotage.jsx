@@ -1,6 +1,6 @@
 'use client';
-// Pilotage : une tuile par site client, mise à jour toute seule toutes les 30 secondes.
-// Une bulle explique chaque problème ; un appui sur la tuile ouvre la fiche du client.
+// Onglet Contrôle (ex-Pilotage) : une tuile par site client, mise à jour toute seule toutes les
+// 30 secondes. Une bulle explique chaque problème ; un appui sur la tuile ouvre la fiche du client.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api.js';
 import { AgencyBar, Spinner } from '../Chrome.jsx';
@@ -13,15 +13,15 @@ import { euros, nomMois } from '../../engine/finances.js';
 
 const sansProto = (u) => String(u || '').replace(/^https?:\/\//, '').replace(/\/$/, '');
 
-function secondes(ms) {
+export function secondes(ms) {
   const s = Math.max(0, Math.round(ms / 1000));
   if (s < 5) return 'à l’instant';
   if (s < 60) return `il y a ${s} s`;
   return `il y a ${Math.floor(s / 60)} min`;
 }
 
-// Chargement + actualisation automatique tant que la page est visible
-function usePilotage() {
+// Chargement + actualisation automatique tant que la page est visible (aussi utilisé par l'Accueil)
+export function usePilotage(periode = 30_000) {
   const [data, setData] = useState(null);
   const [erreur, setErreur] = useState(null);
   const [verif, setVerif] = useState(false);
@@ -51,7 +51,7 @@ function usePilotage() {
     charger();
     const tic = setInterval(() => {
       if (document.visibilityState === 'visible' && navigator.onLine !== false) charger();
-    }, 30_000);
+    }, periode);
     const retour = () => {
       if (document.visibilityState === 'visible' && Date.now() - majRef.current > 10_000) charger();
     };
@@ -62,12 +62,12 @@ function usePilotage() {
       document.removeEventListener('visibilitychange', retour);
       window.removeEventListener('online', retour);
     };
-  }, [charger]);
+  }, [charger, periode]);
 
   return { data, erreur, verif, majLe, charger };
 }
 
-function useHorloge(ms = 5000) {
+export function useHorloge(ms = 5000) {
   const [, setT] = useState(0);
   useEffect(() => {
     const i = setInterval(() => setT((t) => t + 1), ms);
@@ -141,7 +141,7 @@ function ModuleFinances({ f }) {
   if (!f) return null;
   const vide = !f.mrr && !f.encaisseMois && !f.attente && !f.retard && !f.charges;
   return (
-    <a className="module module-fin" href="/pilotage/finances">
+    <a className="module module-fin" href="/controle/finances">
       <span className="module-tete">
         <span className="module-titre">Suivi financier</span>
         <span className="module-lien" aria-hidden="true">
@@ -213,7 +213,7 @@ function Journal({ journal, onOuvrir, id = 'journal-titre' }) {
   );
 }
 
-export default function Pilotage({ studioName }) {
+export default function Pilotage({ studioName, siteInitial = '' }) {
   const { data, erreur, verif, majLe, charger } = usePilotage();
   const [fiche, setFiche] = useState(null); // { id, ancre, probleme }
   const [bulle, setBulle] = useState(null); // { id, probleme, ancre }
@@ -242,7 +242,7 @@ export default function Pilotage({ studioName }) {
     }
     vusRef.current = new Set(pannes.keys());
     const n = data.resume?.panne || 0;
-    document.title = `${n ? `(${n}) ` : ''}Pilotage — ${studioName}`;
+    document.title = `${n ? `(${n}) ` : ''}Contrôle — ${studioName}`;
     try {
       if ('setAppBadge' in navigator) (n ? navigator.setAppBadge(n) : navigator.clearAppBadge()).catch(() => {});
     } catch {}
@@ -255,6 +255,16 @@ export default function Pilotage({ studioName }) {
   }, [toast]);
 
   const siteDe = useCallback((id) => sites.find((s) => s.id === id), [sites]);
+  const initialeFaite = useRef(false);
+  useEffect(() => {
+    if (initialeFaite.current || !siteInitial || !data?.sites) return;
+    initialeFaite.current = true;
+    const s = data.sites.find((x) => x.id === siteInitial);
+    if (s) setFiche({ id: s.id, ancre: null, probleme: null });
+    try {
+      window.history.replaceState(null, '', '/controle');
+    } catch {}
+  }, [data, siteInitial]);
   const ouvrirFiche = (id, ancre, probleme = null) => {
     setBulle(null);
     setFiche({ id, ancre, probleme });
@@ -278,11 +288,11 @@ export default function Pilotage({ studioName }) {
 
   return (
     <div className="ss pilot-app">
-      <AgencyBar studioName={studioName} current="pilotage" />
+      <AgencyBar studioName={studioName} current="controle" />
       <main className="page pilot">
         <div className="pilot-head">
           <div>
-            <h1>Pilotage</h1>
+            <h1>Contrôle</h1>
             <p className="muted">{phrase}</p>
           </div>
           {data?.storage !== 'none' && <Direct majLe={majLe} erreur={erreur} verif={verif} onVerifier={verifier} />}
@@ -316,16 +326,9 @@ export default function Pilotage({ studioName }) {
 
         {data && data.storage !== 'none' && (
           <>
-            <div className="pilot-modules">
-              <ModuleFinances f={data.finances} />
-              <div className="journal-haut">
-                <Journal journal={data.journal} onOuvrir={(id) => siteDe(id) && ouvrirFiche(id, null)} />
-              </div>
-            </div>
-
             <section className="pilot-section" aria-labelledby="sites-titre">
               <div className="pilot-section-tete">
-                <h2 id="sites-titre">Sites en ligne</h2>
+                <h2 id="sites-titre">Statuts clients</h2>
                 {enLigne.length > 0 && (
                   <div className="seg" role="group" aria-label="Filtrer les sites">
                     <button type="button" aria-pressed={filtre === 'tous'} onClick={() => setFiltre('tous')}>
@@ -364,8 +367,9 @@ export default function Pilotage({ studioName }) {
                 </ul>
               </section>
             )}
-            <div className="journal-bas pilot-section">
-              <Journal id="journal-titre-bas" journal={data.journal} onOuvrir={(id) => siteDe(id) && ouvrirFiche(id, null)} />
+            <div className="pilot-modules pilot-modules-bas">
+              <ModuleFinances f={data.finances} />
+              <Journal journal={data.journal} onOuvrir={(id) => siteDe(id) && ouvrirFiche(id, null)} />
             </div>
             <p className="pilot-pied muted small">
               Vérification toutes les {data.intervalle || 30} secondes tant que cette page est ouverte, et toutes les {data.surveillance?.intervalle || 5} minutes quand elle est fermée

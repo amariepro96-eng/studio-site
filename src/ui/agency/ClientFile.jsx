@@ -471,7 +471,7 @@ function FacturationResume({ rec }) {
           </li>
         </ul>
       )}
-      <a className="btn secondary small" href={`/pilotage/finances?client=${rec.id}`}>
+      <a className="btn secondary small" href={`/controle/finances?client=${rec.id}`}>
         {rien ? 'Saisir la facturation' : 'Gérer la facturation'}
       </a>
     </section>

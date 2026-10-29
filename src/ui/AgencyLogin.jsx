@@ -190,7 +190,7 @@ export default function AgencyLogin() {
             {etape === 'mdp' && (
               <>
                 <h1>Espace agence</h1>
-                <p className="muted">Vos dossiers clients et le pilotage de vos sites sont ici. Saisissez votre mot de passe agence.</p>
+                <p className="muted">Vos dossiers clients et le contrôle de vos sites sont ici. Saisissez votre mot de passe agence.</p>
                 <div className="q-field">
                   <label className="q-label" htmlFor="pw">
                     Mot de passe

@@ -1,9 +1,9 @@
 {
-  "name": "Pilotage — Studio Site",
-  "short_name": "Pilotage",
-  "description": "État en direct des sites clients, fiches et suivi financier.",
+  "name": "Studio Site",
+  "short_name": "Studio Site",
+  "description": "Accueil, contrôle en direct des sites clients, fiches et suivi financier.",
   "id": "/pilotage",
-  "start_url": "/pilotage",
+  "start_url": "/accueil",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",

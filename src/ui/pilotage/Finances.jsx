@@ -206,10 +206,10 @@ export default function Finances({ studioName, clientInitial = '' }) {
 
   return (
     <div className="ss pilot-app">
-      <AgencyBar studioName={studioName} current="pilotage" />
+      <AgencyBar studioName={studioName} current="controle" />
       <main className="page fin">
-        <a className="back" href="/pilotage">
-          Pilotage
+        <a className="back" href="/controle">
+          Contrôle
         </a>
         <div className="page-head">
           <div>
@@ -268,7 +268,7 @@ export default function Finances({ studioName, clientInitial = '' }) {
                   <small>/mois</small>
                 </span>
                 <span className="muted small">
-                  abonnements − {euros(r.chargesMensuelles)} de charges ·{' '}
+                  abonnements − {euros(r.chargesMensuelles)} de frais fixes ·{' '}
                   <a href="/agence/reglages" className="small">
                     modifier
                   </a>
