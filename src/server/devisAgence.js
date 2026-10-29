@@ -2,6 +2,7 @@
 // prix ni de mot de passe) et suppression complète d'un espace.
 import { getClient, updateClient, getDevisEspace, supprimerDevisEspace } from './store.js';
 import { libererEmail, masquerEmail } from './devisAcces.js';
+import { oublierAppareilsCompte } from './espace.js';
 
 export function resumeEspace(esp) {
   if (!esp) return null;
@@ -49,6 +50,7 @@ export async function supprimerAppli(w, { clientId = '', qui = '' } = {}) {
     await updateClient(id, (r) => {
       if (r.appliDevis?.wid !== w) return null;
       delete r.appliDevis;
+      oublierAppareilsCompte(r); // couper l'accès « Mon site » ouvert depuis ce compte
       r.log = [...(r.log || []), { at: new Date().toISOString(), what: `Appli Devis & Factures supprimée${qui ? ` par ${qui}` : ''} (compte, devis et factures effacés)` }];
       return r;
     });

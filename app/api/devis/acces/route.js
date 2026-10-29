@@ -1,7 +1,8 @@
 // Appli Devis & Factures : invitation, création du compte, connexion (e-mail + mot de passe +
 // code à 6 chiffres), mot de passe oublié, déconnexion.
-import { route, fail, readBody, memeOrigine, origine } from '../../../../src/server/http.js';
-import { getDevisEspace, updateDevisEspace, widValide } from '../../../../src/server/store.js';
+import { route, fail, readBody, memeOrigine, origine, enHttps } from '../../../../src/server/http.js';
+import { getDevisEspace, updateDevisEspace, updateClient, getClient, widValide } from '../../../../src/server/store.js';
+import { oublierAppareilsCompte, cookieEfface } from '../../../../src/server/espace.js';
 import { rateLimited, clientIp } from '../../../../src/server/config.js';
 import { mailPret, envoyerMail } from '../../../../src/server/mail.js';
 import {
@@ -281,13 +282,23 @@ export const POST = route(async (req) => {
 
     case 'deconnexion': {
       const s = await lireSession(req);
-      if (s)
+      const cookies = [effacerSession(), effacerEtape()];
+      if (s) {
         await updateDevisEspace(s.w, (e) => {
           e.appareils = (e.appareils || []).filter((a) => a.id !== s.appareil.id);
           noterJournal(e, `Déconnexion : ${s.appareil.nom}`);
           return e;
         });
-      return reponse({ ok: true }, { cookies: [effacerSession(), effacerEtape()] });
+        // Couper aussi l'accès « Mon site » ouvert depuis ce compte
+        const cid = s.esp?.clientId;
+        if (cid) {
+          try {
+            if (await getClient(cid)) await updateClient(cid, (rec) => (oublierAppareilsCompte(rec) ? rec : null));
+            cookies.push(cookieEfface(cid, enHttps(req)));
+          } catch {}
+        }
+      }
+      return reponse({ ok: true }, { cookies });
     }
 
     default:

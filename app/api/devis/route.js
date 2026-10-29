@@ -1,10 +1,11 @@
 // Appli Devis & Factures : données de l'entreprise connectée et actions (devis, factures,
 // produits, réglages). Session obligatoire (e-mail + mot de passe + code).
-import { route, fail, readBody, memeOrigine, origine } from '../../../src/server/http.js';
-import { updateDevisEspace, StoreError } from '../../../src/server/store.js';
+import { route, fail, readBody, memeOrigine, origine, enHttps } from '../../../src/server/http.js';
+import { updateDevisEspace, getClient, updateClient, StoreError } from '../../../src/server/store.js';
 import { rateLimited, clientIp } from '../../../src/server/config.js';
 import { mailPret, envoyerMail } from '../../../src/server/mail.js';
 import { lireSession, exigerSession, consommerCode, ajouterEchec, bloque, MSG_BLOQUE, noterJournal, origineLiens } from '../../../src/server/devisAcces.js';
+import { espaceActif, siteChoisi, ouvrirCompte, cookieSession } from '../../../src/server/espace.js';
 import { nettoyerEntreprise } from '../../../src/engine/devis.js';
 import * as M from '../../../src/server/devisMetier.js';
 
@@ -14,10 +15,24 @@ export const maxDuration = 30;
 
 const json = (data, status = 200) => Response.json(data, { status, headers: { 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' } });
 
+// Le dossier de ce compte a-t-il un espace « Mon site » à ouvrir ? (sinon, pas de rubrique site)
+async function siteInfo(esp) {
+  const id = esp?.clientId;
+  if (!id) return null;
+  try {
+    const rec = await getClient(id);
+    if (!rec || !espaceActif(rec) || !siteChoisi(rec)) return null;
+    return { disponible: true, id };
+  } catch {
+    return null;
+  }
+}
+
 export const GET = route(async (req) => {
   const s = await lireSession(req);
   if (!s) return fail(401, 'Session expirée : reconnectez-vous.', 'unauthorized');
-  return json(M.vueApp(M.normaliser(s.esp), s.appareil));
+  const site = await siteInfo(s.esp);
+  return json({ ...M.vueApp(M.normaliser(s.esp), s.appareil), site });
 });
 
 // Modifie l'espace dans une mise à jour protégée (deux appareils ne s'écrasent pas)
@@ -43,9 +58,25 @@ export const POST = route(async (req) => {
   const body = await readBody(req);
   const action = String(body?.action || '');
   const origin = origineLiens(origine(req));
-  const vue = (esp, extra = {}) => json({ ...M.vueApp(esp, s.appareil), ...extra });
+  const site = await siteInfo(s.esp);
+  const vue = (esp, extra = {}) => json({ ...M.vueApp(esp, s.appareil), site, ...extra });
 
   switch (action) {
+    // Accès « Mon site » : le compte est déjà connecté (mot de passe + code), on ouvre une session
+    // sur l'espace de modification du site du même dossier, puis l'appli redirige vers /espace/<id>.
+    case 'site.ouvrir': {
+      if (!site?.disponible) return fail(409, 'Aucun site n’est rattaché à ce compte.', 'pas_de_site');
+      let res = null;
+      await updateClient(site.id, (rec) => {
+        res = ouvrirCompte(rec, req.headers.get('user-agent') || '');
+        return rec;
+      });
+      if (!res) return fail(409, 'Votre site est momentanément indisponible. Réessayez.', 'pas_de_site');
+      const headers = new Headers({ 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' });
+      headers.append('Set-Cookie', cookieSession(site.id, res.cookie, enHttps(req)));
+      return new Response(JSON.stringify({ ok: true, id: site.id }), { status: 200, headers });
+    }
+
     case 'entreprise': {
       // IBAN, BIC et e-mail de contact : le code du téléphone est demandé (une session volée ne
       // peut pas détourner les paiements ni les réponses des clients sans le téléphone)

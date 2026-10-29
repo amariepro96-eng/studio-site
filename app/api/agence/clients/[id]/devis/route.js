@@ -8,6 +8,7 @@ import { mailPret, envoyerMail } from '../../../../../../src/server/mail.js';
 import { creerInvitation, lienInvitation, libererEmail, masquerEmail, noterJournal, origineLiens, DUREE } from '../../../../../../src/server/devisAcces.js';
 import { entrepriseVide, nettoyerEntreprise, emailOk, FORMES, messageInvitation } from '../../../../../../src/engine/devis.js';
 import { resumeEspace, supprimerAppli } from '../../../../../../src/server/devisAgence.js';
+import { oublierAppareilsCompte } from '../../../../../../src/server/espace.js';
 import { activerCalculateur } from '../../../../../../src/server/devisMetier.js';
 
 export const runtime = 'nodejs';
@@ -146,6 +147,8 @@ export const POST = route(
           return e;
         });
         const client = await updateClient(id, (r) => {
+          // Suspension : couper aussi l'accès « Mon site » ouvert depuis le compte
+          if (couper) oublierAppareilsCompte(r);
           r.log = [...(r.log || []), { at: maintenant(), what: couper ? 'Appli Devis : accès suspendu' : 'Appli Devis : accès rétabli' }];
           return r;
         });

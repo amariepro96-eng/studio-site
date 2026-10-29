@@ -5665,11 +5665,18 @@ body {
   bottom: 0;
   z-index: 45;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
   height: var(--dv-bas);
   padding-bottom: env(safe-area-inset-bottom, 0px);
   background: var(--sheet);
   border-top: 1px solid var(--line);
+}
+.dv-onglets-haut .dv-lien-site {
+  color: var(--accent);
+}
+.dv-onglets-bas .dv-lien-site {
+  color: var(--accent);
 }
 .dv-onglets-bas a {
   position: relative;

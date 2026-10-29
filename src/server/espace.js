@@ -139,6 +139,34 @@ export function ouvrir(r, jeton, ua) {
   return { appareil: app, cookie: `${app.id}.${secret}`, premiere };
 }
 
+// Ouvre une session de site SANS lien, après que le compte unifié (e-mail + mot de passe + code)
+// a déjà prouvé l'identité. Réservé à l'accès « Mon site » depuis le compte Devis & Factures du
+// même dossier. L'appareil est marqué via:'compte' pour pouvoir être révoqué avec le compte.
+export function ouvrirCompte(r, ua) {
+  const e = espaceDe(r);
+  const secret = aleatoire(32);
+  const at = maintenant();
+  const app = { id: aleatoire(9), h: empreinte(secret), nom: nomAppareil(ua), creeLe: at, vuLe: at, via: 'compte' };
+  e.appareils = [...e.appareils, app].sort((a, b) => String(a.vuLe).localeCompare(String(b.vuLe))).slice(-MAX_APPAREILS);
+  const premiere = !e.ouvertLe;
+  if (premiere) e.ouvertLe = at;
+  noter(e, `Accès « Mon site » depuis le compte : ${app.nom}`);
+  if (premiere) r.log = [...(r.log || []), { at, what: 'Espace client ouvert depuis le compte Devis & Factures' }];
+  r.espace = e;
+  return { appareil: app, cookie: `${app.id}.${secret}` };
+}
+
+// Retire les appareils ouverts depuis le compte (déconnexion, suspension ou suppression du compte).
+// Renvoie true si au moins un appareil a été retiré.
+export function oublierAppareilsCompte(r) {
+  const e = espaceDe(r);
+  const avant = e.appareils.length;
+  e.appareils = e.appareils.filter((a) => a.via !== 'compte');
+  if (e.appareils.length === avant) return false;
+  r.espace = e;
+  return true;
+}
+
 // Appareil reconnu par son cookie, ou null
 export function lireSession(req, rec) {
   const raw = readCookie(req, nomCookie(rec.id));
@@ -217,6 +245,7 @@ export function vueEspace(rec, { role, appareil = null, settings }) {
     appareils: e.appareils.map(({ h, ...a }) => ({ ...a, actuel: Boolean(appareil && a.id === appareil.id) })).reverse(),
     journal: [...e.journal].reverse().slice(0, 40),
     email: e.email,
+    aDevis: role === 'client' && Boolean(rec.appliDevis?.wid), // lien retour vers le portail Devis & Factures
     invitation: role === 'agence' ? e.invitation : null,
     publicationsDuJour: publicationsDuJour(e),
     limite: LIMITE_JOUR,

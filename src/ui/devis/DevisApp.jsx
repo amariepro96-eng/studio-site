@@ -18,6 +18,7 @@ const DEPART = { onglet: 'devis', ecran: 'liste', id: null };
 
 function Icone({ nom }) {
   const p = {
+    site: 'M4 11l8-7 8 7M6 10v9h12v-9M10 19v-6h4v6',
     devis: 'M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6',
     factures: 'M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6M9 16h3',
     reglages: 'M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM4 12h2M18 12h2M12 4v2M12 18v2M6.3 6.3l1.4 1.4M16.3 16.3l1.4 1.4M6.3 17.7l1.4-1.4M16.3 7.7l1.4-1.4',
@@ -107,6 +108,22 @@ export default function DevisApp() {
     []
   );
 
+  // « Mon site » : le compte est déjà connecté, on ouvre la session du site puis on y va.
+  const [versSite, setVersSite] = useState(false);
+  const ouvrirMonSite = useCallback(async (id) => {
+    if (garde.current && !window.confirm('Quitter sans enregistrer vos modifications ?')) return;
+    garde.current = null;
+    setVersSite(true);
+    try {
+      const d = await api('/api/devis', { method: 'POST', body: { action: 'site.ouvrir' } });
+      window.location.assign('/espace/' + d.id);
+    } catch (e) {
+      setVersSite(false);
+      if (e.status === 401) setEtat('connexion');
+      else setToast(e.message || 'Impossible d’ouvrir votre site pour le moment.');
+    }
+  }, []);
+
   const agir = useCallback(async (body) => {
     try {
       const d = await api('/api/devis', { method: 'POST', body });
@@ -161,6 +178,11 @@ export default function DevisApp() {
       <header className="dv-entete">
         <Marque nom={data.entreprise.nom} />
         <nav className="dv-onglets-haut" aria-label="Sections">
+          {data.site?.disponible && (
+            <a href={`/espace/${data.site.id}`} className="dv-lien-site" onClick={(e) => { e.preventDefault(); ouvrirMonSite(data.site.id); }}>
+              {versSite ? 'Ouverture…' : 'Mon site'}
+            </a>
+          )}
           {ONGLETS.map(([id, label]) => (
             <a
               key={id}
@@ -185,6 +207,12 @@ export default function DevisApp() {
       </main>
 
       <nav className="dv-onglets-bas" aria-label="Sections">
+        {data.site?.disponible && (
+          <a href={`/espace/${data.site.id}`} className="dv-lien-site" onClick={(e) => { e.preventDefault(); ouvrirMonSite(data.site.id); }}>
+            <Icone nom="site" />
+            <span>{versSite ? 'Ouverture…' : 'Mon site'}</span>
+          </a>
+        )}
         {ONGLETS.map(([id, label]) => (
           <a
             key={id}
