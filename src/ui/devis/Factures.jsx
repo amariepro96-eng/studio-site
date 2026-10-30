@@ -318,6 +318,11 @@ function Detail({ data, agir, aller, id }) {
         <button type="button" className="btn secondary" onClick={() => window.print()}>
           Imprimer / PDF
         </button>
+        {st !== 'a_emettre' && (
+          <a className="btn secondary" href={`/api/devis/facturx?id=${f.id}`}>
+            Télécharger Factur-X
+          </a>
+        )}
         {devis && (
           <button type="button" className="btn-text small" onClick={() => aller({ onglet: 'devis', ecran: 'detail', id: devis.id })}>
             Voir le devis {devis.numero}
