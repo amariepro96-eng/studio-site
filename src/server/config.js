@@ -20,6 +20,9 @@ export function config() {
     // Enregistrement automatique dans Google Drive (script du tableau Suivi clients, document 11)
     driveUrl: (process.env.DRIVE_WEBHOOK_URL || '').trim(),
     driveSecret: (process.env.DRIVE_WEBHOOK_SECRET || '').trim(),
+    // Connexion Google Drive de chaque client (OAuth) : factures rangées dans SON Drive (document 21)
+    googleClientId: (process.env.GOOGLE_CLIENT_ID || '').trim(),
+    googleClientSecret: (process.env.GOOGLE_CLIENT_SECRET || '').trim(),
     // Nombre de générations complètes autorisées par visiteur et par heure
     generationsPerHour: Math.max(1, parseInt(process.env.GENERATIONS_PER_HOUR || '20', 10) || 20),
   };

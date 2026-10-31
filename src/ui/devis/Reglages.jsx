@@ -12,6 +12,7 @@ const SECTIONS = [
   ['produits', 'Produits et prix'],
   ['securite', 'Sécurité'],
   ['installer', 'Installer l’appli'],
+  ['drive', 'Google Drive'],
 ];
 
 // ---------- Entreprise ----------
@@ -728,6 +729,79 @@ function Securite({ data, recharger, setToast }) {
   );
 }
 
+// ---------- Google Drive du client ----------
+function GoogleDrive({ data, agir }) {
+  const d = data.compte.drive || { connecte: false };
+  const [busy, setBusy] = useState(false);
+  const entreprise = data.entreprise?.nom || 'votre entreprise';
+  let der = null;
+  if (d.dernier) {
+    if (d.dernier.statut === 'ok') der = { cls: 'ton-ok', txt: `Dernière facture rangée le ${fmtQuand(d.dernier.at)}` };
+    else if (d.dernier.statut === 'reconnexion') der = { cls: 'attention', txt: 'Reconnexion nécessaire : reconnectez votre Google Drive.' };
+    else der = { cls: 'attention', txt: `Dernier dépôt en échec (${d.dernier.message || 'erreur'})` };
+  }
+  return (
+    <div className="dv-reglage">
+      <div className="card dv-bloc">
+        <h2 className="dv-bloc-titre">Mon Google Drive</h2>
+        <p className="muted small">
+          Reliez votre compte Google une fois : chaque facture que vous émettez se range alors automatiquement dans votre Google Drive, dans un dossier «&nbsp;Factures — {entreprise}&nbsp;». L’appli ne peut voir que les fichiers qu’elle y dépose elle-même — jamais le reste de votre Drive.
+        </p>
+        {d.connecte ? (
+          <>
+            <dl className="dv-infos">
+              <div>
+                <dt>Compte relié</dt>
+                <dd>{d.email || 'Compte Google'}</dd>
+              </div>
+              {d.connecteLe && (
+                <div>
+                  <dt>Connecté le</dt>
+                  <dd>{fmtJour(d.connecteLe)}</dd>
+                </div>
+              )}
+              {der && (
+                <div>
+                  <dt>Dernier dépôt</dt>
+                  <dd className={der.cls}>{der.txt}</dd>
+                </div>
+              )}
+            </dl>
+            <div className="row-actions">
+              {der?.cls === 'attention' && (
+                <a className="btn secondary small" href="/api/devis/drive">
+                  Reconnecter
+                </a>
+              )}
+              <button
+                type="button"
+                className="btn secondary small"
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true);
+                  try {
+                    await agir({ action: 'drive.deconnecter' });
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                Déconnecter mon Google Drive
+              </button>
+            </div>
+          </>
+        ) : (
+          <p>
+            <a className="btn" href="/api/devis/drive">
+              Connecter mon Google Drive
+            </a>
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ---------- Installation ----------
 function Installer() {
   const [invite, setInvite] = useState(null);
@@ -805,11 +879,13 @@ export default function Reglages(props) {
   const { nav, aller } = props;
   const facturation = props.data.rubriques?.facturation !== false;
   // Site seul : seulement le compte (Sécurité, Installer). Avec facturation : tout, + Calculateur si activé.
-  const sections = !facturation
+  const base = !facturation
     ? SECTIONS.filter(([id]) => id === 'securite' || id === 'installer')
     : props.data.calculateur?.actif
       ? [...SECTIONS.slice(0, 2), ['calculateur', 'Calculateur'], ...SECTIONS.slice(2)]
       : SECTIONS;
+  // L'onglet Google Drive n'apparaît que si la connexion Google est configurée côté serveur
+  const sections = props.data.driveDispo ? base : base.filter(([id]) => id !== 'drive');
   const defautSec = facturation ? 'entreprise' : 'securite';
   const sec = sections.some(([id]) => id === nav.section) ? nav.section : defautSec;
   return (
@@ -830,6 +906,7 @@ export default function Reglages(props) {
       {sec === 'calculateur' && <ReglagesCalculateur {...props} />}
       {sec === 'securite' && <Securite {...props} />}
       {sec === 'installer' && <Installer />}
+      {sec === 'drive' && <GoogleDrive {...props} />}
     </section>
   );
 }

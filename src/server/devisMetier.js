@@ -51,6 +51,10 @@ export function vueApp(esp, appareil) {
       secoursRestants: (c.secours || []).filter((x) => !x.utiliseLe).length,
       appareils: (esp.appareils || []).map((a) => ({ ...a, actuel: a.id === appareil?.id })).reverse(),
       journal: (esp.journal || []).slice(-30).reverse(),
+      // État Google Drive — jamais le jeton, seulement de quoi afficher et agir
+      drive: c.drive
+        ? { connecte: true, email: c.drive.email || '', connecteLe: c.drive.connecteLe || null, dernier: c.drive.dernier || null }
+        : { connecte: false },
     },
     calculateur: rub.facturation ? esp.calculateur || null : null,
     manques: rub.facturation ? D.manquesEntreprise(esp.entreprise) : [],
@@ -269,6 +273,21 @@ export function marquerNonPayee(esp, id) {
   f.payeeLe = null;
   histo(f, 'Paiement annulé (remise en « à encaisser »)');
   return f;
+}
+
+// Consigne le résultat d'un dépôt dans le Google Drive du client (jamais bloquant)
+export function noterDrive(esp, factureId, r) {
+  esp.compte = esp.compte || {};
+  if (esp.compte.drive) {
+    esp.compte.drive.dernier = { at: maintenant(), statut: r.statut, message: r.message || '', lien: r.lien || '' };
+    if (r.statut === 'ok' && r.folderId) esp.compte.drive.folderId = r.folderId;
+  }
+  const f = esp.factures.find((x) => x.id === factureId);
+  if (f) {
+    if (r.statut === 'ok') histo(f, 'Rangée dans le Google Drive du client');
+    else if (r.statut === 'reconnexion') histo(f, 'Google Drive : reconnexion nécessaire (non rangée)');
+    else histo(f, `Google Drive : dépôt échoué (${r.message || 'erreur'})`);
+  }
 }
 
 // ---------- Page du client final ----------

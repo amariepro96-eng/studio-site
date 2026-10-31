@@ -8,6 +8,8 @@ import { lireSession, exigerSession, consommerCode, ajouterEchec, bloque, MSG_BL
 import { espaceActif, siteChoisi, ouvrirCompte, cookieSession } from '../../../src/server/espace.js';
 import { nettoyerEntreprise } from '../../../src/engine/devis.js';
 import * as M from '../../../src/server/devisMetier.js';
+import { archiverFacture } from '../../../src/server/factureDrive.js';
+import { dechiffrerJeton, revoquer, driveConfigure } from '../../../src/server/googleDrive.js';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -32,7 +34,7 @@ export const GET = route(async (req) => {
   const s = await lireSession(req);
   if (!s) return fail(401, 'Session expirée : reconnectez-vous.', 'unauthorized');
   const site = await siteInfo(s.esp);
-  return json({ ...M.vueApp(M.normaliser(s.esp), s.appareil), site });
+  return json({ ...M.vueApp(M.normaliser(s.esp), s.appareil), site, driveDispo: driveConfigure() });
 });
 
 // Modifie l'espace dans une mise à jour protégée (deux appareils ne s'écrasent pas)
@@ -59,7 +61,7 @@ export const POST = route(async (req) => {
   const action = String(body?.action || '');
   const origin = origineLiens(origine(req));
   const site = await siteInfo(s.esp);
-  const vue = (esp, extra = {}) => json({ ...M.vueApp(esp, s.appareil), site, ...extra });
+  const vue = (esp, extra = {}) => json({ ...M.vueApp(esp, s.appareil), site, driveDispo: driveConfigure(), ...extra });
 
   switch (action) {
     // Accès « Mon site » : le compte est déjà connecté (mot de passe + code), on ouvre une session
@@ -176,7 +178,27 @@ export const POST = route(async (req) => {
 
     case 'facture.emettre': {
       const { esp, res } = await modifier(s, (e) => M.emettreFacture(e, body.id, { acompteVerse: body.acompteVerse, datePrestation: body.datePrestation }));
-      return vue(esp, { id: res.id, note: `Facture ${res.numero} émise.` });
+      let note = `Facture ${res.numero} émise.`;
+      // Dépôt automatique dans le Google Drive du client (si connecté) — jamais bloquant
+      if (esp.compte?.drive?.refreshToken) {
+        const r = await archiverFacture(esp, res);
+        if (r.statut !== 'absent') {
+          const { esp: esp2 } = await modifier(s, (e) => M.noterDrive(e, res.id, r));
+          if (r.statut === 'ok') note += ' Rangée dans votre Google Drive.';
+          else if (r.statut === 'reconnexion') note += ' (Google Drive : reconnexion à refaire dans Réglages.)';
+          else note += ' (Dépôt Google Drive échoué : voir Réglages.)';
+          return vue(esp2, { id: res.id, note });
+        }
+      }
+      return vue(esp, { id: res.id, note });
+    }
+    case 'drive.deconnecter': {
+      const brut = s.esp.compte?.drive?.refreshToken ? dechiffrerJeton(s.esp.compte.drive.refreshToken) : null;
+      const { esp } = await modifier(s, (e) => {
+        if (e.compte) delete e.compte.drive;
+      });
+      if (brut) revoquer(brut).catch(() => {});
+      return vue(esp, { note: 'Google Drive déconnecté.' });
     }
     case 'facture.supprimer': {
       const { esp } = await modifier(s, (e) => M.supprimerFacture(e, body.id));

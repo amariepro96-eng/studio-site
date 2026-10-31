@@ -179,6 +179,22 @@ export default function DevisApp() {
     return () => clearTimeout(t);
   }, [toast]);
 
+  // Retour de la connexion Google Drive (/devis?drive=…#reglages) : message + ouverture de la section
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const p = new URLSearchParams(window.location.search).get('drive');
+    if (!p) return;
+    const msg = {
+      ok: 'Google Drive connecté : vos factures s’y rangeront automatiquement.',
+      echec: 'La connexion à Google Drive a échoué. Réessayez.',
+      refus: 'Connexion à Google Drive annulée.',
+      expire: 'La connexion a expiré. Réessayez.',
+      indispo: 'Google Drive n’est pas encore disponible : contactez votre prestataire.',
+    }[p];
+    if (msg) setToast(msg);
+    aller({ onglet: 'reglages', section: 'drive' }, { remplacer: true });
+  }, [aller]);
+
   if (etat === 'connexion') return <Connexion onConnecte={() => (setEtat('chargement'), charger())} />;
   if (etat === 'chargement')
     return (
