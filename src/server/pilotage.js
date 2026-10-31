@@ -499,7 +499,9 @@ export function etatPilotage({ force = false } = {}) {
 }
 
 async function calculer(force) {
-  const [clients, settings, deja] = await Promise.all([listClients(), getSettings(), getPilotage()]);
+  const [tous, settings, deja] = await Promise.all([listClients(), getSettings(), getPilotage()]);
+  // Les dossiers d'essai et le client de démo (Atelier libre) ne sont ni surveillés ni comptés
+  const clients = tous.filter((c) => !c.essai && !c.demo);
   const jour = aujourdhuiParis();
   const env = publishEnv();
   const avecVercel = clients.some((c) => c.publication?.projectId);

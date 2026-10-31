@@ -20,6 +20,9 @@ function summary(r) {
     picked: (r.picked || []).length,
     chosen: Boolean(r.choice),
     liveUrl: r.liveUrl || '',
+    // Dossier d'essai ou client de démo (Atelier libre) : rangé à part du tableau Clients
+    essai: Boolean(r.essai || r.demo),
+    demo: Boolean(r.demo),
     // Espace client : ce qui attend l'agence (demandes, changements pas encore en ligne)
     espace: r.espace?.creeLe
       ? {
@@ -44,7 +47,7 @@ export const POST = route(
     const body = await readBody(req);
     const name = String(body?.name || '').trim();
     if (!name) return fail(400, 'Indiquez le nom du client.', 'bad_request');
-    const rec = await createClient({ name, contact: body?.contact, formula: body?.formula, mode: body?.mode === 'self' ? 'self' : 'send' });
+    const rec = await createClient({ name, contact: body?.contact, formula: body?.formula, mode: body?.mode === 'self' ? 'self' : 'send', essai: body?.essai === true });
     return ok({ client: rec });
   },
   { agency: true }

@@ -207,7 +207,8 @@ export default function Publication({ rec, onRecord, onEditBrief }) {
               <input id="pub-ident" type="text" value={ident} onChange={(e) => setIdent(e.target.value)} onBlur={() => slug(ident) !== verif.identifiant && check(ident)} />
             )}
             <p className="q-hint">
-              Dépôt <code>{repoVu}</code>, privé, enregistré à ton nom. Même identifiant que dans Drive et dans le tableau Suivi clients.
+              Dépôt <code>{repoVu}</code>, privé, enregistré à ton nom.{' '}
+              {verif.essai ? 'Dossier d’essai : le préfixe « essai- » évite de prendre le nom d’un futur vrai client.' : 'Même identifiant que dans Drive et dans le tableau Suivi clients.'}
             </p>
           </div>
           <ul className="pub-checks">
@@ -295,12 +296,65 @@ export default function Publication({ rec, onRecord, onEditBrief }) {
         </p>
       )}
 
-      {pub?.deployState === 'READY' && <Domaine key={pub.domain || 'nouveau'} pub={pub} initial={verif.domaine} ovh={verif.ovh} call={call} onRecord={onRecord} />}
+      {pub?.deployState === 'READY' && (
+        <Domaine key={verif.essai ? 'essai' : pub.domain || 'nouveau'} pub={pub} initial={verif.domaine} ovh={verif.ovh} essai={verif.essai} domainesTest={verif.domainesTest || []} call={call} onRecord={onRecord} />
+      )}
     </div>
   );
 }
 
-function Domaine({ pub, initial, ovh, call, onRecord }) {
+// Atelier libre : branche un de tes domaines de test sur l'essai, en un clic
+function DomaineTest({ pub, domainesTest, call, onRecord }) {
+  const [val, setVal] = useState(pub.domain || domainesTest[0] || '');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [info, setInfo] = useState('');
+  async function go() {
+    setBusy(true);
+    setErr('');
+    setInfo('');
+    try {
+      const res = await call('domaineTest', { domaine: val });
+      if (res.client) onRecord(res.client);
+      const d = res.publication?.domain || val;
+      const morceaux = [`${d} est relié à cet essai.`];
+      if (res.repris?.length) morceaux.push(`Repris à : ${res.repris.join(', ')}.`);
+      if (res.ovh?.fait) morceaux.push(`Zone OVHcloud réglée (${res.ovh.actions.length} changement${res.ovh.actions.length > 1 ? 's' : ''}).`);
+      else if (res.ovh?.erreur) morceaux.push(`Zone OVHcloud : ${res.ovh.erreur}`);
+      morceaux.push(res.publication?.domainOk ? 'Le site répond déjà sur ce domaine.' : 'Compte quelques minutes, puis « Vérifier ».');
+      setInfo(morceaux.join(' '));
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="pub-domain pub-test">
+      <h4>Domaine de test</h4>
+      <div className="linkline">
+        <input type="text" list="domaines-test" value={val} placeholder="beta-test.fr" aria-label="Domaine de test" onChange={(e) => setVal(e.target.value)} />
+        <datalist id="domaines-test">
+          {domainesTest.map((d) => (
+            <option key={d} value={d} />
+          ))}
+        </datalist>
+        <button type="button" className="btn primary small" disabled={busy || !val.trim()} onClick={go}>
+          {busy ? 'Branchement…' : 'Utiliser ce domaine'}
+        </button>
+      </div>
+      <p className="muted small">Un de tes domaines de test, chez OVHcloud. S’il est relié à un autre essai, Studio Site le lui reprend, le relie à cet essai (avec et sans www) et règle la zone DNS si la clé OVHcloud est branchée.</p>
+      {info && <p className="side-note">{info}</p>}
+      {err && (
+        <p className="q-error" role="alert">
+          {err}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function Domaine({ pub, initial, ovh, essai, domainesTest = [], call, onRecord }) {
   const [val, setVal] = useState(pub.domain || initial || '');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -368,6 +422,9 @@ function Domaine({ pub, initial, ovh, call, onRecord }) {
     setCopied(ok ? v : '');
     setTimeout(() => setCopied(''), 2000);
   }
+
+  // Dossier d'essai sans domaine : directement le domaine de test
+  if (essai && !pub.domain) return <DomaineTest pub={pub} domainesTest={domainesTest} call={call} onRecord={onRecord} />;
 
   if (!pub.domain) {
     return (
@@ -467,6 +524,8 @@ function Domaine({ pub, initial, ovh, call, onRecord }) {
       ) : (
         !pub.domainOk && <p className="muted small">Pour que Studio Site règle lui-même la zone DNS OVHcloud, ajoute sa clé API dans Vercel (document 14, §F).</p>
       )}
+      {/* Essai : changer de domaine de test (ex. passer de beta-test.fr à beta-test.info) */}
+      {essai && <DomaineTest pub={pub} domainesTest={domainesTest} call={call} onRecord={onRecord} />}
     </div>
   );
 }

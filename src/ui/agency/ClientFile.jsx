@@ -490,6 +490,7 @@ export default function ClientFile({ id, studioName }) {
   const [gen, setGen] = useState(null);
   const [imgStatus, setImgStatus] = useState({ state: 'idle' });
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmEssai, setConfirmEssai] = useState(false);
   const [choosing, setChoosing] = useState(false);
   const [origin, setOrigin] = useState('');
   const abortRef = useRef(null);
@@ -647,10 +648,21 @@ export default function ClientFile({ id, studioName }) {
     }
   }
 
+  async function marquerEssai() {
+    try {
+      const { client } = await api(`/api/agence/clients/${id}`, { method: 'PATCH', body: { set: { essai: true } } });
+      setRec(client);
+      setConfirmEssai(false);
+    } catch (e) {
+      setError(e.message);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }
+
   async function remove() {
     try {
       await api(`/api/agence/clients/${id}`, { method: 'DELETE' });
-      window.location.href = '/agence';
+      window.location.href = rec?.essai || rec?.demo ? '/agence/atelier' : '/agence';
     } catch (e) {
       setError(e.message);
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -690,6 +702,8 @@ export default function ClientFile({ id, studioName }) {
   const qText = `Bonjour,\n\nPour créer le site de ${name}, voici votre questionnaire :\n${qLink}\n\nComptez une dizaine de minutes. Vos réponses sont enregistrées à chaque étape : vous pouvez vous arrêter et reprendre plus tard avec le même lien. Pensez à préparer votre logo et quelques photos (votre lieu, votre équipe, vos réalisations).\n\nÀ bientôt,\n${owner}`;
   const pText = `Bonjour,\n\nVos propositions de site pour ${name} sont prêtes :\n${pLink}\n\nOuvrez chaque modèle en grand, parcourez ses pages, puis choisissez celui que vous préférez. Vous pouvez ajouter un commentaire avec votre choix.\n\nÀ bientôt,\n${owner}`;
   const stage = stageOf(rec.status);
+  // Dossier d'essai ou client de démo (Atelier libre)
+  const essai = Boolean(rec.essai || rec.demo);
 
   let panel;
   if (view === 'edit') {
@@ -832,15 +846,18 @@ export default function ClientFile({ id, studioName }) {
   }
 
   return (
-    <div className={`ss file-${rec.status}`}>
-      <AgencyBar studioName={studioName} />
+    <div className={`ss file-${rec.status}${essai ? ' file-essai' : ''}`}>
+      <AgencyBar studioName={studioName} current={essai ? 'atelier' : 'clients'} />
       <main className="page page-wide">
-        <a className="back" href="/agence">
-          Tous les clients
+        <a className="back" href={essai ? '/agence/atelier' : '/agence'}>
+          {essai ? 'Atelier libre' : 'Tous les clients'}
         </a>
         <div className="file-head">
           <div>
-            <h1>{name}</h1>
+            <h1>
+              {name}
+              {essai && <span className="tag essai">{rec.demo ? 'Démo' : 'Essai'}</span>}
+            </h1>
             <p className="muted">{[rec.contact, rec.formula && `Formule ${rec.formula}`, `Dossier créé ${timeAgo(rec.createdAt)}`].filter(Boolean).join(' — ')}</p>
           </div>
           <span className={`turn-badge turn-${rec.status === 'live' ? 'done' : stage.waiting}`}>{rec.status === 'live' ? 'Terminé' : stage.waiting === 'agence' ? 'À vous de jouer' : 'En attente du client'}</span>
@@ -874,7 +891,14 @@ export default function ClientFile({ id, studioName }) {
             </section>
             <FacturationResume rec={rec} />
             <DevisAgence rec={rec} settings={settings} onRecord={(client) => pendingRef.current === 0 && setRec(client)} />
-            <DriveAgence rec={rec} onRecord={(client) => pendingRef.current === 0 && setRec(client)} />
+            {essai ? (
+              <section className="card side-card">
+                <h2>Google Drive</h2>
+                <p className="muted small">Dossier d’essai : rien n’est envoyé dans Google Drive ni dans le tableau Suivi clients.</p>
+              </section>
+            ) : (
+              <DriveAgence rec={rec} onRecord={(client) => pendingRef.current === 0 && setRec(client)} />
+            )}
             <section className="card side-card">
               <h2>Historique</h2>
               <ol className="log">
@@ -891,7 +915,9 @@ export default function ClientFile({ id, studioName }) {
             <section className="side-danger">
               {confirmDelete ? (
                 <p>
-                  Supprimer définitivement le dossier, les réponses et les photos ?{' '}
+                  {essai
+                    ? `Supprimer définitivement l’essai${rec.publication?.repo || rec.publication?.projectId ? `, son dépôt ${rec.publication?.repo || ''} et son projet Vercel` : ''} ?`
+                    : 'Supprimer définitivement le dossier, les réponses et les photos ?'}{' '}
                   <button type="button" className="btn-text small danger" onClick={remove}>
                     Supprimer
                   </button>{' '}
@@ -901,9 +927,26 @@ export default function ClientFile({ id, studioName }) {
                 </p>
               ) : (
                 <button type="button" className="btn-text small quiet" onClick={() => setConfirmDelete(true)}>
-                  Supprimer le dossier
+                  {essai ? 'Supprimer l’essai' : 'Supprimer le dossier'}
                 </button>
               )}
+              {/* Dossier de test créé comme un vrai client : le ranger dans l'Atelier libre */}
+              {!essai &&
+                (confirmEssai ? (
+                  <p>
+                    Ranger ce dossier dans l’Atelier libre comme essai ? Plus rien ne partira dans Drive, et sa suppression effacera aussi son dépôt GitHub et son projet Vercel.{' '}
+                    <button type="button" className="btn-text small" onClick={marquerEssai}>
+                      Oui, c’est un essai
+                    </button>{' '}
+                    <button type="button" className="btn-text small" onClick={() => setConfirmEssai(false)}>
+                      Annuler
+                    </button>
+                  </p>
+                ) : (
+                  <button type="button" className="btn-text small quiet" onClick={() => setConfirmEssai(true)}>
+                    Marquer comme essai
+                  </button>
+                ))}
             </section>
           </aside>
         </div>

@@ -15,7 +15,7 @@
 //   domaine / verifierDomaine  ajoute le domaine du client et vérifie les réglages DNS
 import { renderPage, allPageSlugs } from '../engine/render.js';
 import { renderImages, renderBrief } from '../engine/records.js';
-import { readImage, getSettings, StoreError } from './store.js';
+import { readImage, getSettings, saveSettings, listClients, updateClient, StoreError } from './store.js';
 import { ovhStatus, lireZone, planDns, appliquerDns } from './ovh.js';
 
 const GH = 'https://api.github.com';
@@ -55,6 +55,15 @@ export function identifiantDe(texte) {
 }
 const ID_OK = /^[a-z0-9](?:[a-z0-9-]{0,58}[a-z0-9])?$/;
 export const identifiantValide = (id) => ID_OK.test(String(id || '')) && !String(id).includes('--');
+
+// Identifiant d'un dossier : celui du dossier Drive (tableau Suivi clients), sinon le nom de
+// l'entreprise. Un dossier d'essai prend toujours le préfixe « essai- » (site-essai-…), pour ne
+// jamais occuper le nom qu'aura plus tard le dépôt d'un vrai client.
+export function identifiantDuDossier(rec, saisi = '') {
+  const id = identifiantDe(saisi || rec.drive?.identifiant || rec.brief?.businessName || rec.name);
+  if (!(rec.essai || rec.demo) || id.startsWith('essai-')) return id;
+  return identifiantDe('essai-' + id);
+}
 
 // ---------- Appels GitHub ----------
 async function gh(path, { method = 'GET', body } = {}) {
@@ -246,7 +255,7 @@ export async function verifier(rec, { identifiant } = {}) {
   const pub = rec.publication || null;
   const fixe = Boolean(pub?.repo);
   // Par défaut, le même identifiant que le dossier Google Drive du client (tableau Suivi clients)
-  const id = fixe ? pub.identifiant : identifiantDe(identifiant || rec.drive?.identifiant || rec.brief?.businessName || rec.name);
+  const id = fixe ? pub.identifiant : identifiantDuDossier(rec, identifiant);
   const { pages, binaries, manques } = await siteFiles(rec, settings);
   const out = {
     status,
@@ -261,6 +270,8 @@ export async function verifier(rec, { identifiant } = {}) {
     changementsGitHub: null,
     publication: vuePublication(pub),
     domaine: pub?.domain || rec.brief?.domain || '',
+    essai: Boolean(rec.essai || rec.demo),
+    domainesTest: settings.domainesTest || [],
   };
   // Mentions légales incomplètes : simple avertissement (out.manques), la mise en ligne reste possible
   if (!fixe && !identifiantValide(id)) out.bloquants.push('Identifiant invalide : lettres minuscules, chiffres et tirets uniquement.');
@@ -286,7 +297,7 @@ export async function etapeDepot(rec, identifiant) {
     if (res.status === 404) throw new StoreError(`Le dépôt ${pub.repo} n’existe plus sur GitHub. Il a été supprimé ou transféré : vérifie avant de continuer.`, 'repo_gone', 409);
     throw ghFail(res, 'lecture du dépôt');
   }
-  const id = identifiantDe(identifiant || rec.drive?.identifiant || rec.brief?.businessName || rec.name);
+  const id = identifiantDuDossier(rec, identifiant);
   if (!identifiantValide(id)) throw new StoreError('Identifiant invalide : lettres minuscules, chiffres et tirets uniquement.', 'bad_id', 400);
   const name = `site-${id}`;
   const existe = await gh(`/repos/${env.org}/${name}`);
@@ -500,4 +511,98 @@ export async function etapeDnsOvh(rec, { appliquer = false } = {}) {
   if (!appliquer || !actions.length) return { zone: pub.domain, actions, applique: false };
   await appliquerDns(pub.domain, actions);
   return { zone: pub.domain, actions, applique: true };
+}
+
+// ---------- Atelier libre : dossiers d'essai ----------
+const estEssai = (rec) => Boolean(rec?.essai || rec?.demo);
+
+// Retire le domaine (et son www) d'un projet Vercel : www d'abord, il redirige vers le domaine seul
+async function retirerDomaine(projectId, teamId, apex) {
+  for (const name of ['www.' + apex, apex]) {
+    const res = await vc(`/v9/projects/${encodeURIComponent(projectId)}/domains/${encodeURIComponent(name)}`, { method: 'DELETE', teamId });
+    if (!res.ok && res.status !== 404) throw vcFail(res, `retrait du domaine ${name}`);
+  }
+}
+
+// Branche un de tes domaines de test sur ce dossier d'essai, en un clic :
+// 1. le reprend aux autres essais qui l'utilisent ;  2. le relie à ce projet (avec et sans www) ;
+// 3. règle la zone DNS chez OVHcloud si la clé est branchée.  Jamais sur le projet d'un vrai client.
+export async function etapeDomaineTest(rec, texte) {
+  await assertActive();
+  if (!estEssai(rec)) throw new StoreError('Le domaine de test se branche uniquement sur un dossier d’essai de l’Atelier libre.', 'not_essai', 403);
+  const pub = rec.publication || {};
+  if (!pub.projectId || pub.deployState !== 'READY') throw new StoreError('Mets d’abord l’essai en ligne sur son adresse provisoire.', 'not_ready', 409);
+  const apex = domaineDe(texte);
+  if (!DOMAINE_OK.test(apex)) throw new StoreError('Adresse de domaine invalide. Exemple : beta-test.fr', 'bad_domain', 400);
+  const teamId = pub.teamId || (await equipe());
+  const tous = await listClients();
+  // Un vrai client utilise déjà ce domaine : on n'y touche pas
+  const vrai = tous.find((c) => c.id !== rec.id && !estEssai(c) && c.publication?.domain === apex);
+  if (vrai) throw new StoreError(`Le domaine ${apex} est relié au dossier « ${vrai.brief?.businessName || vrai.name} », qui n’est pas un essai. Si c’était un test, ouvre ce dossier et clique sur « Marquer comme essai », puis réessaie.`, 'domain_real', 409);
+  const repris = [];
+  for (const c of tous) {
+    if (c.id === rec.id || !estEssai(c) || c.publication?.domain !== apex || !c.publication?.projectId) continue;
+    await retirerDomaine(c.publication.projectId, c.publication.teamId || teamId, apex);
+    await updateClient(c.id, (r) => {
+      r.publication = { ...(r.publication || {}), domain: '', dns: null, domainOk: false, domainCheckedAt: null };
+      if (r.liveUrl === 'https://' + apex) r.liveUrl = r.publication.url || '';
+      r.log = [...(r.log || []), { at: new Date().toISOString(), what: `Domaine de test ${apex} repris par l’essai « ${rec.brief?.businessName || rec.name} »` }];
+      return r;
+    });
+    repris.push(c.brief?.businessName || c.name || c.id);
+  }
+  // Cet essai avait un autre domaine de test : on le libère
+  if (pub.domain && pub.domain !== apex) await retirerDomaine(pub.projectId, teamId, pub.domain);
+  const libre = { ...rec, publication: { ...pub, domain: '' } };
+  let patch;
+  try {
+    patch = await etapeDomaine(libre, apex);
+  } catch (e) {
+    if (e?.code === 'domain_taken') throw new StoreError(`Le domaine ${apex} est encore relié à un autre projet Vercel (créé à la main ?). Retire-le dans Vercel › ce projet › Settings › Domains, puis réessaie.`, 'domain_taken', 409);
+    throw e;
+  }
+  // Retient le domaine pour le reproposer dans les prochains essais
+  const settings = await getSettings();
+  const liste = [apex, ...(settings.domainesTest || []).filter((d) => d !== apex)];
+  await saveSettings({ domainesTest: liste }).catch(() => {});
+  // Zone DNS chez OVHcloud : réglée tout de suite si la clé est branchée
+  let ovh = { fait: false, actions: [], erreur: '' };
+  if (ovhStatus().configured) {
+    try {
+      const res = await etapeDnsOvh({ ...rec, publication: { ...pub, ...patch } }, { appliquer: true });
+      ovh = { fait: res.applique, actions: res.actions, erreur: '' };
+      if (res.applique) Object.assign(patch, await etapeVerifierDomaine({ ...rec, publication: { ...pub, ...patch } }));
+    } catch (e) {
+      ovh = { fait: false, actions: [], erreur: e?.message || 'Réglage OVHcloud impossible.' };
+    }
+  }
+  return { patch, repris, ovh, ancien: pub.domain && pub.domain !== apex ? pub.domain : '' };
+}
+
+// Supprime ce que la mise en ligne a créé pour un dossier d'essai : projet Vercel puis dépôt GitHub.
+// Seulement pour un essai, et seulement le dépôt créé pour ce dossier dans l'organisation.
+export async function supprimerPublicationEssai(rec) {
+  if (!estEssai(rec)) throw new StoreError('Seul un dossier d’essai peut être supprimé avec son site.', 'not_essai', 403);
+  const pub = rec.publication || {};
+  const fait = [];
+  if (!pub.projectId && !pub.repo) return fait;
+  const env = publishEnv();
+  if (pub.projectId) {
+    if (!env.vercelToken) throw new StoreError('Clé Vercel absente : le projet de cet essai ne peut pas être supprimé. Supprime-le à la main dans Vercel, puis réessaie.', 'vercel_off', 503);
+    const teamId = pub.teamId || (await equipe());
+    const res = await vc(`/v9/projects/${encodeURIComponent(pub.projectId)}`, { method: 'DELETE', teamId });
+    if (!res.ok && res.status !== 404) throw vcFail(res, 'suppression du projet Vercel');
+    fait.push(`projet Vercel ${pub.projectName || pub.projectId}`);
+  }
+  if (pub.repo) {
+    if (!String(pub.repo).toLowerCase().startsWith(env.org.toLowerCase() + '/')) throw new StoreError(`Le dépôt ${pub.repo} n’est pas dans l’organisation ${env.org} : supprime-le à la main.`, 'repo_outside', 409);
+    if (!env.githubToken) throw new StoreError('Clé GitHub absente : le dépôt de cet essai ne peut pas être supprimé. Supprime-le à la main dans GitHub, puis réessaie.', 'github_off', 503);
+    const res = await gh(`/repos/${pub.repo}`, { method: 'DELETE' });
+    if (!res.ok && res.status !== 404) {
+      if (res.status === 403) throw new StoreError(`GitHub refuse de supprimer ${pub.repo} : la clé GITHUB_PUBLISH_TOKEN doit avoir « Administration » en lecture et écriture, et l’organisation doit autoriser la suppression de dépôts (Settings › Member privileges). Sinon, supprime-le à la main.`, 'github_forbidden', 502);
+      throw ghFail(res, 'suppression du dépôt');
+    }
+    fait.push(`dépôt GitHub ${pub.repo}`);
+  }
+  return fait;
 }

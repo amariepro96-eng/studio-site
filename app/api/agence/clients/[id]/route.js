@@ -3,6 +3,8 @@ import { route, ok, readBody, fail, sanitizeBrief } from '../../../../../src/ser
 import { getClient, updateClient, deleteClient, STATUSES, validId, getSettings, getDevisEspace } from '../../../../../src/server/store.js';
 import { STAGES } from '../../../../../src/engine/records.js';
 import { driveStatus, envoyerVersDrive } from '../../../../../src/server/drive.js';
+import { supprimerPublicationEssai } from '../../../../../src/server/publish.js';
+import { supprimerAppli } from '../../../../../src/server/devisAgence.js';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -63,6 +65,11 @@ export const PATCH = route(
       if (set.status === 'proposed') r.proposedAt = new Date().toISOString();
       if (set.status === 'live') r.liveAt = new Date().toISOString();
       if (set.status === 'answered' && !r.submittedAt) r.submittedAt = new Date().toISOString();
+      // Dossier de test créé comme un vrai client : on le range dans l'Atelier (sans retour en arrière)
+      if (set.essai === true && !r.essai) {
+        r.essai = true;
+        r.log = [...(r.log || []), { at: new Date().toISOString(), what: 'Dossier marqué comme essai (rangé dans l’Atelier libre)' }];
+      }
       const what = typeof body?.log === 'string' ? body.log.slice(0, 200) : set.status ? STAGES.find((s) => s.id === set.status)?.label : '';
       if (what) r.log = [...(r.log || []), { at: new Date().toISOString(), what }];
       return r;
@@ -79,6 +86,13 @@ export const DELETE = route(
   async (req, { id }) => {
     // Un client avec l'appli Devis & Factures : ses devis et factures ne partent pas par erreur
     const rec = await getClient(id);
+    // Dossier d'essai (Atelier libre) : on supprime aussi ce que la mise en ligne a créé
+    if (rec && (rec.essai || rec.demo)) {
+      if (rec.appliDevis?.wid) await supprimerAppli(rec.appliDevis.wid, { clientId: id }).catch(() => {});
+      const supprime = await supprimerPublicationEssai(rec);
+      await deleteClient(id);
+      return ok({ ok: true, supprime });
+    }
     if (rec?.appliDevis?.wid && (await getDevisEspace(rec.appliDevis.wid))) return fail(409, 'Ce client a l’appli Devis & Factures : supprime-la d’abord (bloc Appli Devis & Factures du dossier, ou Réglages › Comptes Devis & Factures).', 'devis_actif');
     await deleteClient(id);
     return ok({ ok: true });

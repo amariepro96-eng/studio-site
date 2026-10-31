@@ -3555,11 +3555,7 @@ body {
     display: none;
   }
 }
-@media (max-width: 480px) {
-  .ss .app-nav a[data-nav='atelier'] {
-    display: none;
-  }
-}
+/* L'Atelier libre (dossiers d'essai) marche aussi sur téléphone : le menu défile */
 
 /* ---------- Connexion ---------- */
 .login .login-card {
@@ -7056,4 +7052,43 @@ fieldset.dv-bloc legend + * {
 }
 .bac-warn {
   margin: 0 0 10px;
+}
+
+/* Atelier libre : essais et client de démo */
+.atelier-essais,
+.atelier-demo {
+  display: grid;
+  gap: 12px;
+  margin-top: 28px;
+}
+.atelier-essais h2,
+.atelier-demo h2 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+.atelier-demo .bac-sable {
+  border-radius: var(--radius-sm);
+}
+.empty-state.compact {
+  padding: 20px;
+  text-align: left;
+}
+.empty-state.compact .how {
+  margin: 4px 0 12px;
+}
+.tag.essai {
+  margin-left: 10px;
+  vertical-align: middle;
+  font-size: 0.75rem;
+  background: var(--saffron-soft);
+  color: var(--saffron-ink);
+  border: 1px solid var(--saffron);
+}
+.pub-test .linkline input {
+  min-width: 0;
+}
+.ss h1 .tag.essai {
+  font-family: var(--sans);
+  font-weight: 650;
+  letter-spacing: 0;
 }

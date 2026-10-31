@@ -12,7 +12,7 @@ Le parcours client se gère depuis l'**espace agence** (`/agence`, protégé par
 6. **Mise en service** : aperçu complet, téléchargement du .zip (mentions légales et logo déjà remplis), liste de contrôle, puis « Site en ligne ».
 7. **Espace client** (`/espace/…`) : livré avec le site, il permet au client de modifier lui-même ses horaires, prix, annonces et photos (voir plus bas).
 
-L'**Atelier libre** (`/agence/atelier`) garde l'ancien fonctionnement : brief sur une page, 10 modèles, .zip, sans rien enregistrer. La page d'accueil (`/`) ne génère plus rien : elle oriente les visiteurs.
+L'**Atelier libre** (`/agence/atelier`) est le bac à sable de l'agence : chaque **essai** est un vrai dossier (même parcours qu'un client : questionnaire ou brief, 10 propositions, sélection, page de choix, mise en ligne, espace client, appli Devis), marqué « Essai ». Différences avec un vrai client : rien ne part dans Google Drive ni dans Suivi clients, l'essai n'apparaît ni dans le tableau Clients ni dans les finances ou le pilotage, son dépôt s'appelle `site-essai-…`, le bouton **Utiliser ce domaine** branche un domaine de test (repris aux autres essais, zone OVHcloud réglée), et **Supprimer l'essai** efface aussi son dépôt GitHub et son projet Vercel. Un dossier de test créé comme un vrai client peut être rangé dans l'Atelier avec **Marquer comme essai**. Le client de démo (Café Lumière, déjà en ligne, espace prêt) y reste disponible. La page d'accueil (`/`) ne génère plus rien : elle oriente les visiteurs.
 
 ## Comment ça marche
 
@@ -34,7 +34,7 @@ Sans clé API, l'application fonctionne en **mode démo** avec des textes géné
 3. Dans **Settings → Environment Variables**, ajoutez au minimum `ANTHROPIC_API_KEY` et `AGENCY_PASSWORD`.
 4. **Stockage des dossiers** : onglet **Storage** › **Create** › **Blob** › accès **Private** › reliez-le au projet. Vercel ajoute seul `BLOB_STORE_ID` (et `BLOB_READ_WRITE_TOKEN`). Redéployez.
 
-Sans stockage, l'espace agence affiche la marche à suivre ; seul l'Atelier libre fonctionne. En local (`npm run dev`) sans Vercel Blob, les dossiers sont rangés dans `.data/`.
+Sans stockage, l'espace agence affiche la marche à suivre. En local (`npm run dev`) sans Vercel Blob, les dossiers sont rangés dans `.data/`.
 
 ## Variables d'environnement
 
@@ -109,7 +109,7 @@ app/                      Pages Next.js et routes API
   page.js                 Accueil (oriente vers les liens privés et l'espace agence)
   agence/page.js          Tableau de bord des clients (mot de passe)
   agence/clients/[id]     Dossier d'un client, de l'envoi du questionnaire à la mise en ligne
-  agence/atelier          Atelier libre (génération sans dossier)
+  agence/atelier          Atelier libre : essais (dossiers de test) et client de démo
   agence/reglages         Nom affiché, prénom, contact, hébergeur des mentions légales
   questionnaire/[id]      Questionnaire du client (lien privé)
   propositions/[id]       Sélection de modèles et choix du client (lien privé)

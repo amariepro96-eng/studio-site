@@ -33,12 +33,12 @@ export function StorageSetup() {
           <strong>Deployments</strong> › <strong>⋯</strong> sur la première ligne › <strong>Redeploy</strong>. Quand c’est <strong>Ready</strong>, rechargez cette page (Ctrl + F5).
         </li>
       </ol>
-      <p className="muted">En attendant, l’Atelier libre fonctionne comme avant, sans rien enregistrer.</p>
+      <p className="muted">L’Atelier libre (dossiers d’essai) en a besoin aussi.</p>
     </section>
   );
 }
 
-function NewClient({ onCancel, onCreated }) {
+export function NewClient({ onCancel, onCreated, essai = false }) {
   const [name, setName] = useState('');
   const [contact, setContact] = useState('');
   const [formula, setFormula] = useState('');
@@ -48,14 +48,14 @@ function NewClient({ onCancel, onCreated }) {
   async function submit(e) {
     e.preventDefault();
     if (!name.trim()) {
-      setError('Indiquez le nom de l’entreprise du client.');
+      setError(essai ? 'Donne un nom à l’entreprise de ton essai.' : 'Indiquez le nom de l’entreprise du client.');
       document.getElementById('nc-name')?.focus();
       return;
     }
     setBusy(true);
     setError('');
     try {
-      const { client } = await api('/api/agence/clients', { method: 'POST', body: { name, contact, formula, mode } });
+      const { client } = await api('/api/agence/clients', { method: 'POST', body: { name, contact, formula, mode, ...(essai ? { essai: true } : {}) } });
       onCreated(client);
     } catch (err) {
       setError(err.message);
@@ -65,7 +65,7 @@ function NewClient({ onCancel, onCreated }) {
   return (
     <form className="card new-client" onSubmit={submit} noValidate>
       <div className="new-client-head">
-        <h2>Nouveau client</h2>
+        <h2>{essai ? 'Nouvel essai' : 'Nouveau client'}</h2>
         <button type="button" className="btn-text small" onClick={onCancel}>
           Annuler
         </button>
@@ -75,13 +75,13 @@ function NewClient({ onCancel, onCreated }) {
           <label className="q-label" htmlFor="nc-name">
             Nom de l’entreprise
           </label>
-          <input id="nc-name" type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex. Boulangerie Martin" autoFocus autoComplete="off" />
+          <input id="nc-name" type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder={essai ? 'Ex. Boulangerie Test' : 'Ex. Boulangerie Martin'} autoFocus autoComplete="off" />
         </div>
         <div className="q-field half">
           <label className="q-label" htmlFor="nc-contact">
-            E-mail ou téléphone du client
+            {essai ? 'Ton e-mail ou ton téléphone' : 'E-mail ou téléphone du client'}
           </label>
-          <input id="nc-contact" type="text" value={contact} onChange={(e) => setContact(e.target.value)} placeholder="Pour lui envoyer le lien" autoComplete="off" />
+          <input id="nc-contact" type="text" value={contact} onChange={(e) => setContact(e.target.value)} placeholder={essai ? 'Pour recevoir les messages comme un client' : 'Pour lui envoyer le lien'} autoComplete="off" />
         </div>
         <div className="q-field half">
           <label className="q-label" htmlFor="nc-formula">
@@ -102,7 +102,7 @@ function NewClient({ onCancel, onCreated }) {
             <label className={`q-option${mode === 'send' ? ' on' : ''}`}>
               <input type="radio" name="nc-mode" checked={mode === 'send'} onChange={() => setMode('send')} />
               <span className="q-option-title">Le client, avec un lien</span>
-              <span className="q-option-hint">Vous lui envoyez le lien, il répond chez lui.</span>
+              <span className="q-option-hint">{essai ? 'Tu ouvres toi-même le lien du questionnaire, comme le ferait le client.' : 'Vous lui envoyez le lien, il répond chez lui.'}</span>
             </label>
             <label className={`q-option${mode === 'self' ? ' on' : ''}`}>
               <input type="radio" name="nc-mode" checked={mode === 'self'} onChange={() => setMode('self')} />
@@ -119,14 +119,14 @@ function NewClient({ onCancel, onCreated }) {
       )}
       <div className="form-actions">
         <button type="submit" className="btn primary" disabled={busy}>
-          {busy ? 'Création…' : 'Créer le dossier'}
+          {busy ? 'Création…' : essai ? 'Créer l’essai' : 'Créer le dossier'}
         </button>
       </div>
     </form>
   );
 }
 
-function ClientRow({ c }) {
+export function ClientRow({ c }) {
   const stage = stageOf(c.status);
   const sector = SECTORS.find((s) => s.id === c.sector)?.label;
   const turn = c.status === 'live' ? 'done' : stage.waiting;
@@ -168,7 +168,9 @@ export default function Dashboard({ studioName, open }) {
     load();
   }, []);
 
-  const clients = data?.clients || [];
+  // Les dossiers d'essai et le client de démo sont rangés dans l'Atelier libre
+  const clients = (data?.clients || []).filter((c) => !c.essai);
+  const nbEssais = (data?.clients || []).filter((c) => c.essai && !c.demo).length;
   const counts = useMemo(() => Object.fromEntries(FILTERS.map((f) => [f.id, clients.filter(f.test).length])), [clients]);
   const shown = clients.filter(FILTERS.find((f) => f.id === filter).test);
   const todo = counts.agence || 0;
@@ -194,6 +196,11 @@ export default function Dashboard({ studioName, open }) {
           <div className="alert soft">
             <strong>L’espace agence n’a pas de mot de passe.</strong> Ajoutez la variable <code>AGENCY_PASSWORD</code> dans Vercel : les dossiers de vos clients ne doivent pas être accessibles à tous.
           </div>
+        )}
+        {nbEssais > 0 && (
+          <p className="muted small">
+            {nbEssais} dossier{nbEssais > 1 ? 's' : ''} d’essai dans l’<a href="/agence/atelier">Atelier libre</a>.
+          </p>
         )}
         {data?.storage === 'local' && <div className="alert soft">Mode local : les dossiers sont enregistrés dans le dossier .data de votre ordinateur.</div>}
         {error && (

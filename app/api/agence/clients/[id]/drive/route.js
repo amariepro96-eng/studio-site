@@ -23,6 +23,7 @@ export const POST = route(
     if (!memeOrigine(req)) return fail(403, 'Requête refusée.', 'origin');
     if (rateLimited('drive-agence:' + clientIp(req), 60)) return fail(429, 'Trop d’envois : réessaie dans une heure.', 'rate');
     const res = await envoyerVersDrive(id, { site: true });
+    if (res.raison === 'essai') return fail(409, 'Dossier d’essai : rien n’est envoyé dans Google Drive ni dans le tableau Suivi clients.', 'essai');
     if (res.raison === 'off') return fail(503, `Google Drive pas branché : il manque ${driveStatus().missing.join(' et ')} dans Vercel.`, 'drive_off');
     if (res.raison === 'introuvable') return fail(404, 'Dossier introuvable.', 'not_found');
     if (res.raison === 'vide') return fail(409, 'Le brief est encore vide : rien à envoyer.', 'empty');

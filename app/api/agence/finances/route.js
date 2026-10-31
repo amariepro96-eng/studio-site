@@ -10,7 +10,8 @@ export const GET = route(
   async () => {
     if (storageMode() === 'none') return ok({ storage: 'none' });
     const [clients, settings] = await Promise.all([listClients(), getSettings()]);
-    const liste = clients.map((c) => ({
+    // Les dossiers d'essai et le client de démo ne comptent pas dans les finances
+    const liste = clients.filter((c) => !c.essai && !c.demo).map((c) => ({
       id: c.id,
       nom: c.brief?.businessName || c.name || 'Client sans nom',
       formule: c.formula || '',

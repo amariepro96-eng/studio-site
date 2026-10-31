@@ -28,7 +28,7 @@ export default function BacASable() {
   return (
     <div className="bac-sable">
       <div className="bac-sable-txt">
-        <strong>Bac à sable</strong> — un client de démo (site + espace prêts) pour tester les fonctionnalités comme sur un vrai dossier : active l’appli Devis, le calculateur, la variante « Modifier son site », etc.
+        <strong>Café Lumière</strong> — dossier fictif déjà « en ligne », espace client prêt : active l’appli Devis, le calculateur, la variante « Modifier son site », etc.
       </div>
       <div className="bac-sable-actions">
         {demo ? (

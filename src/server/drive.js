@@ -162,6 +162,8 @@ export async function envoyerVersDrive(id, { site = false, parClient = false } =
   if (!driveStatus().configured) return { fait: false, raison: 'off' };
   const avant = await getClient(id);
   if (!avant) return { fait: false, raison: 'introuvable' };
+  // Dossier d'essai ou client de démo (Atelier libre) : rien ne part dans Drive ni dans Suivi clients
+  if (avant.essai || avant.demo) return { fait: false, raison: 'essai', client: avant };
   // Pas encore de réponses (questionnaire pas commencé) : rien à ranger
   const nom = String(avant.brief?.businessName || '').trim().slice(0, 120);
   if (!nom) return { fait: false, raison: 'vide', client: avant };

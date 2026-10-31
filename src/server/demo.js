@@ -4,6 +4,7 @@
 import { createClient, updateClient, deleteClient, listClients } from './store.js';
 import { preparer } from './espace.js';
 import { supprimerAppli } from './devisAgence.js';
+import { supprimerPublicationEssai } from './publish.js';
 
 const DEMO_BRIEF = {
   businessName: 'Café Lumière',
@@ -67,6 +68,7 @@ export async function supprimerDemo() {
   for (const c of list) {
     if (!c.demo) continue;
     if (c.appliDevis?.wid) await supprimerAppli(c.appliDevis.wid, { clientId: c.id }).catch(() => {});
+    await supprimerPublicationEssai(c).catch(() => {});
     await deleteClient(c.id).catch(() => {});
   }
 }

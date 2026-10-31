@@ -300,6 +300,8 @@ export async function saveSettings(input) {
   for (const k of Object.keys(DEFAULT_SETTINGS)) if (typeof DEFAULT_SETTINGS[k] === 'string' && typeof input?.[k] === 'string') s[k] = input[k].slice(0, 300).trim();
   if (typeof input?.autoPublish === 'boolean') s.autoPublish = input.autoPublish;
   if (typeof input?.alertesEmail === 'boolean') s.alertesEmail = input.alertesEmail;
+  // Domaines de test de l'Atelier libre (les derniers utilisés, pour les reproposer)
+  if (Array.isArray(input?.domainesTest)) s.domainesTest = [...new Set(input.domainesTest.map((d) => String(d || '').trim().toLowerCase()).filter((d) => /^[a-z0-9.-]{4,253}$/.test(d)))].slice(0, 6);
   if (Array.isArray(input?.charges)) {
     const avant = totalCharges(s.charges);
     s.charges = nettoyerCharges(input.charges);
@@ -319,7 +321,7 @@ const recordPath = (id) => {
   return `clients/${id}.json`;
 };
 
-export async function createClient({ name = '', contact = '', formula = '', mode = 'send' } = {}) {
+export async function createClient({ name = '', contact = '', formula = '', mode = 'send', essai = false } = {}) {
   const now = new Date().toISOString();
   const rec = {
     id: newId(),
@@ -343,7 +345,9 @@ export async function createClient({ name = '', contact = '', formula = '', mode
     checks: {},
     liveUrl: '',
     liveAt: null,
-    log: [{ at: now, what: mode === 'self' ? 'Dossier créé (brief rempli par l’agence)' : 'Dossier créé, questionnaire prêt à envoyer' }],
+    log: [{ at: now, what: (essai ? 'Dossier d’essai créé (Atelier libre). ' : '') + (mode === 'self' ? 'Dossier créé (brief rempli par l’agence)' : 'Dossier créé, questionnaire prêt à envoyer') }],
+    // Dossier d'essai (Atelier libre) : même parcours qu'un vrai client, sans Drive ni Suivi clients
+    ...(essai ? { essai: true } : {}),
   };
   await writeRaw(recordPath(rec.id), JSON.stringify(rec), { contentType: 'application/json', overwrite: false });
   return rec;

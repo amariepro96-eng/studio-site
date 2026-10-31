@@ -4,7 +4,7 @@ import { after } from 'next/server';
 import { route, ok, fail, readBody, memeOrigine } from '../../../../../../src/server/http.js';
 import { getClient, updateClient } from '../../../../../../src/server/store.js';
 import { rateLimited, clientIp } from '../../../../../../src/server/config.js';
-import { verifier, etapeDepot, etapeVercel, etapeFichiers, etapeEtat, etapeDomaine, etapeVerifierDomaine, etapeDnsOvh, vuePublication } from '../../../../../../src/server/publish.js';
+import { verifier, etapeDepot, etapeVercel, etapeFichiers, etapeEtat, etapeDomaine, etapeVerifierDomaine, etapeDnsOvh, etapeDomaineTest, vuePublication } from '../../../../../../src/server/publish.js';
 import { libelle } from '../../../../../../src/server/ovh.js';
 import { driveStatus, envoyerVersDrive } from '../../../../../../src/server/drive.js';
 
@@ -122,6 +122,25 @@ export const POST = route(
           } catch {}
         }
         return ok({ client, publication: vuePublication(client.publication), zone: res.zone, actions: res.actions.map((a) => ({ ...a, texte: libelle(a) })), applique: res.applique });
+      }
+
+      // Atelier libre : branche un domaine de test sur cet essai (repris aux autres essais, DNS OVHcloud réglé)
+      case 'domaineTest': {
+        const res = await etapeDomaineTest(rec, String(body.domaine || ''));
+        const p = res.patch;
+        const log =
+          `Domaine de test relié : ${p.domain}` +
+          (res.ancien ? ` (remplace ${res.ancien})` : '') +
+          (res.repris.length ? `, repris à : ${res.repris.join(', ')}` : '') +
+          (res.ovh.fait ? ', zone OVHcloud réglée' : '');
+        const client = await enregistrer(id, p, {
+          log: log.slice(0, 200),
+          extra: (r) => {
+            r.liveUrl = p.domainOk ? 'https://' + p.domain : r.publication?.url || r.liveUrl || '';
+            if (p.domainOk) r.checks = { ...(r.checks || {}), publish: true };
+          },
+        });
+        return ok({ client, publication: vuePublication(client.publication), repris: res.repris, ovh: { ...res.ovh, actions: res.ovh.actions.map((a) => ({ ...a, texte: libelle(a) })) } });
       }
 
       default:
