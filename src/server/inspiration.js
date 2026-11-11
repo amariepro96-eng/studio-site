@@ -490,8 +490,9 @@ async function traiterSite(c, rec) {
   try {
     navigateur = await ouvrirNavigateur();
   } catch (e) {
-    console.error('[inspiration] navigateur', e?.name, String(e?.message || '').slice(0, 300));
-    throw new InspirationError('Le navigateur de l’agent n’a pas pu démarrer sur le serveur : relance plus tard (document 03).', 'navigateur');
+    const detail = String(e?.message || e || '').split('\n')[0].replace(/\/[^\s'"]*\//g, '…/').slice(0, 160);
+    console.error('[inspiration] navigateur', e?.name, String(e?.message || '').slice(0, 1000));
+    throw new InspirationError(`Le navigateur de l’agent n’a pas pu démarrer sur le serveur (document 22, §E). Détail : ${detail}`, 'navigateur');
   }
   try {
     visite = await avecDelai(visiterSite(navigateur, c.url), SITE_MAX_MS, 'La visite du site a pris trop de temps.');

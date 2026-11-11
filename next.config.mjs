@@ -23,9 +23,10 @@ const nextConfig = {
   reactStrictMode: true,
   // Agent d'inspiration : navigateur sans écran (Chromium compressé) chargé tel quel par le serveur
   serverExternalPackages: ['@sparticuz/chromium', 'playwright-core'],
-  // Les fichiers de Chromium ne sont pas importés par le code : on les joint aux fonctions qui l'utilisent
+  // Fichiers que le traçage automatique ne voit pas (Chromium compressé, browsers.json et autres
+  // fichiers lus par playwright-core au lancement) : joints en entier à la fonction de l'agent
   outputFileTracingIncludes: {
-    '/api/agence/inspiration/agent': ['./node_modules/@sparticuz/chromium/bin/**/*'],
+    '/api/agence/inspiration/agent': ['./node_modules/@sparticuz/chromium/**/*', './node_modules/playwright-core/**/*'],
   },
   async headers() {
     return [
