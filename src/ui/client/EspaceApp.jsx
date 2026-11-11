@@ -425,7 +425,7 @@ export default function EspaceApp({ id, vueAgence = false }) {
   const apercu = useMemo(() => {
     if (!srv || !etatVu || !origin) return null;
     const a = appliquer(srv.dossier, etatVu);
-    const rec = { id, brief: a.brief, aiImages: a.aiImages, stockImages: srv.dossier.stockImages };
+    const rec = { id, brief: a.brief, aiImages: a.aiImages, stockImages: srv.dossier.stockImages, imageInfo: srv.dossier.imageInfo, content: a.content };
     return { brief: renderBrief(rec, origin, srv.dossier.hosting), content: a.content, images: renderImages(rec, origin) };
   }, [srv, etatVu, origin, id]);
   const pages = useMemo(() => (apercu ? [...sitePages(apercu.brief, apercu.content), { slug: 'mentions-legales', label: 'Mentions légales' }] : []), [apercu]);

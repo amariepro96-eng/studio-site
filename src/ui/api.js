@@ -31,12 +31,13 @@ export async function api(path, { method = 'GET', body } = {}) {
   return json;
 }
 
-export async function uploadImage(url, blob, { kind = 'photo', alt = '', filename = 'image.jpg', batch = '', signal } = {}) {
+export async function uploadImage(url, blob, { kind = 'photo', alt = '', filename = 'image.jpg', batch = '', role = '', signal } = {}) {
   const fd = new FormData();
   fd.append('file', blob, filename);
   fd.append('kind', kind);
   fd.append('alt', alt);
   if (batch) fd.append('batch', batch);
+  if (role) fd.append('role', role);
   let res;
   try {
     res = await fetch(url, { method: 'POST', body: fd, signal });

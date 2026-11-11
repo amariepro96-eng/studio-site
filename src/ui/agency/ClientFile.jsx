@@ -18,9 +18,10 @@ import { MOODS } from '../../engine/archetypes.js';
 import { renderPage, sitePages } from '../../engine/render.js';
 import { buildZip, zipName } from '../../engine/zip.js';
 import { generateSite, apiRunner, apiImages } from '../../ai/generate.js';
-import { apiImageGen, aiImagesNeeded, generateImages } from '../../ai/images.js';
+import { apiImageGen, generateImages, TARGET_VISUALS } from '../../ai/images.js';
+import { imagesAFaire, imageUtilisable, orientation, ROLE_LABELS, IMAGE_ROLES } from '../../engine/placement.js';
 import { insertVersions, baseOf } from '../../engine/variants.js';
-import { stageOf, renderImages, renderBrief, timeAgo, CHECKS, MIN_PICK, MAX_PICK, plural } from '../../engine/records.js';
+import { stageOf, renderImages, recordImages, renderBrief, timeAgo, CHECKS, MIN_PICK, MAX_PICK, plural } from '../../engine/records.js';
 
 const STEPS7 = remoteSteps({ strict: false });
 const fmtDate = (iso) => (iso ? new Date(iso).toLocaleString('fr-FR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) : '');
@@ -138,7 +139,88 @@ function defaultMessage(rec) {
   return `Bonjour,\n\nVoici les propositions que j’ai retenues pour le site de ${name}. Ouvrez chacune en grand et parcourez ses pages : accueil, services, contact…\n\nChoisissez ensuite celle que vous préférez. Si un détail vous gêne (une couleur, une photo, un texte), dites-le dans votre commentaire : je l’ajuste avant la mise en ligne.`;
 }
 
-function SelectPanel({ rec, settings, brief, images, save, onRegenerate, imgStatus, onRetryImages, onClose }) {
+// ---------- Photos du client : où l'IA les place ----------
+const ORIENT = { paysage: 'en largeur', portrait: 'en hauteur', carre: 'carrée' };
+
+function PhotosClient({ rec, srcOf, status, onAnalyse, onChoix, manquent, onFill, busy }) {
+  const [ouvertChoisi, setOuvertChoisi] = useState(null);
+  const photos = recordImages(rec).filter((p) => p.source === 'client');
+  if (!photos.length) return null;
+  const analysees = photos.filter((p) => p.role || p.qualite);
+  const ecartees = photos.filter((p) => !imageUtilisable(p));
+  const nonVues = photos.length - analysees.length;
+  // Ouvert d'office s'il y a une photo écartée ; ensuite, c'est l'agence qui décide
+  const ouvert = ouvertChoisi ?? (status.state === 'running' || ecartees.length > 0);
+  return (
+    <details className="photos-client" open={ouvert} onToggle={(e) => setOuvertChoisi(e.currentTarget.open)}>
+      <summary>
+        <strong>Photos du client</strong>{' '}
+        <span className="muted small">
+          {status.state === 'running'
+            ? 'L’IA regarde les photos…'
+            : analysees.length
+              ? `${photos.length - ecartees.length} placée${photos.length - ecartees.length > 1 ? 's' : ''} selon ce qu’elles montrent${ecartees.length ? `, ${ecartees.length} écartée${ecartees.length > 1 ? 's' : ''}` : ''}`
+              : `${photos.length} photo${photos.length > 1 ? 's' : ''}, utilisées dans l’ordre du client`}
+        </span>
+      </summary>
+      <p className="muted small">
+        Chaque photo va à l’emplacement qui lui convient : vue du lieu en haut de page, produit à côté de son service, portrait dans « À propos »… Les photos écartées (floues, captures, logo) ne sont pas mises dans le site, et l’IA crée des images pour combler.
+      </p>
+      {status.state === 'failed' && (
+        <p className="q-error small" role="alert">
+          {status.error}
+        </p>
+      )}
+      <ul className="photos-client-list">
+        {photos.map((p) => {
+          const garde = imageUtilisable(p);
+          const o = orientation(p);
+          return (
+            <li key={p.id} className={garde ? '' : 'is-off'}>
+              <img src={srcOf(p.id)} alt={p.alt || ''} loading="lazy" />
+              <div>
+                <strong className="small">{p.role ? ROLE_LABELS[p.role] || p.role : 'Pas encore analysée'}</strong>
+                {p.sujet && <span className="muted small">{p.sujet}</span>}
+                {p.service && <span className="tag small">→ {p.service}</span>}
+                {(p.raison || (o && p.role)) && (
+                  <span className={'small ' + (garde ? 'muted' : 'warn-text')}>
+                    {!garde && p.choix !== 'non' ? 'Écartée : ' : ''}
+                    {p.choix === 'non' ? 'Écartée par toi' : p.raison || `Photo ${ORIENT[o]}`}
+                  </span>
+                )}
+                <span className="photo-choix">
+                  {garde ? (
+                    <button type="button" className="btn-text small" onClick={() => onChoix(p.id, p.choix === 'oui' ? '' : 'non')}>
+                      {p.choix === 'oui' ? 'Laisser l’IA décider' : 'Ne pas l’utiliser'}
+                    </button>
+                  ) : (
+                    <button type="button" className="btn-text small" onClick={() => onChoix(p.id, p.choix === 'non' ? '' : 'oui')}>
+                      {p.choix === 'non' ? 'Laisser l’IA décider' : 'L’utiliser quand même'}
+                    </button>
+                  )}
+                </span>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+      <div className="row-actions">
+        {onAnalyse && (
+          <button type="button" className="btn secondary small" disabled={status.state === 'running'} onClick={() => onAnalyse(analysees.length > 0 && nonVues === 0)}>
+            {status.state === 'running' ? 'Analyse…' : nonVues ? `Analyser ${nonVues > 1 ? `les ${nonVues} photos` : 'la photo'}` : 'Réanalyser les photos'}
+          </button>
+        )}
+        {manquent > 0 && !busy && (
+          <button type="button" className="btn-text small" onClick={onFill}>
+            {manquent > 1 ? `Créer les ${manquent} images qui manquent` : 'Créer l’image qui manque'}
+          </button>
+        )}
+      </div>
+    </details>
+  );
+}
+
+function SelectPanel({ rec, settings, brief, images, save, onRegenerate, imgStatus, onRetryImages, photos, onClose }) {
   const models = rec.result.models;
   const [picked, setPicked] = useState(() => (rec.picked?.length ? rec.picked : []));
   const [message, setMessage] = useState(() => rec.message || defaultMessage(rec));
@@ -215,6 +297,7 @@ function SelectPanel({ rec, settings, brief, images, save, onRegenerate, imgStat
       </div>
       {rec.result.source === 'demo' && <div className="alert soft">Textes génériques (mode démo) : branchez la clé Claude pour des textes rédigés par l’IA, puis relancez la génération.</div>}
       <ImageStatus status={imgStatus} agency onRetry={onRetryImages} />
+      {photos}
       <div className="model-grid">
         {models.map((m, i) => (
           <SelectCard
@@ -489,6 +572,7 @@ export default function ClientFile({ id, studioName }) {
   const [savingBrief, setSavingBrief] = useState(false);
   const [gen, setGen] = useState(null);
   const [imgStatus, setImgStatus] = useState({ state: 'idle' });
+  const [photoStatus, setPhotoStatus] = useState({ state: 'idle' });
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmEssai, setConfirmEssai] = useState(false);
   const [choosing, setChoosing] = useState(false);
@@ -560,31 +644,70 @@ export default function ClientFile({ id, studioName }) {
   );
 
   const brief = useMemo(() => (rec ? renderBrief(rec, origin, settings?.hosting) : null), [rec, origin, settings]);
-  const images = useMemo(() => (rec ? renderImages(rec, origin) : []), [rec?.brief?.photos, rec?.aiImages, rec?.stockImages, rec?.id, origin]); // eslint-disable-line react-hooks/exhaustive-deps
+  const images = useMemo(() => (rec ? renderImages(rec, origin) : []), [rec?.brief?.photos, rec?.aiImages, rec?.stockImages, rec?.imageInfo, rec?.result?.content?.imagePrompts, rec?.id, origin]); // eslint-disable-line react-hooks/exhaustive-deps
   const srcOf = useCallback((imgId) => `/api/files/${id}/${imgId}`, [id]);
 
   const runner = svc?.ai ? apiRunner() : null;
   const imageGen = svc?.aiImages ? apiImageGen() : null;
   const imagesFn = svc?.images ? apiImages() : null;
 
-  function startImages(content, current, { more = false } = {}) {
+  // Photos du client regardées par l'IA : ce qu'elles montrent, leur qualité, leur service.
+  // Elles sont ensuite placées au bon endroit, et seules les images qui manquent sont créées.
+  async function analyserPhotos(current, { force = false } = {}) {
+    if (!(current.brief?.photos || []).length || !svc?.ai) return current;
+    setPhotoStatus({ state: 'running' });
+    try {
+      const d = await api(`/api/agence/clients/${id}/photos`, { method: 'POST', body: { action: 'analyser', force } });
+      setPhotoStatus({ state: 'done', analysees: d.analysees });
+      if (d.client) setRec(d.client);
+      return d.client || current;
+    } catch (e) {
+      setPhotoStatus({ state: 'failed', error: e.message });
+      return current;
+    }
+  }
+
+  async function choixPhoto(photo, choix) {
+    try {
+      const d = await api(`/api/agence/clients/${id}/photos`, { method: 'POST', body: { action: 'choix', photo, choix } });
+      if (d.client) setRec(d.client);
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
+  // Images à créer : seulement celles que les photos du client ne couvrent pas (toutes si aucune
+  // ne va) ; « combler » tient aussi compte des images IA déjà là ; « more » en ajoute d'autres
+  function imagesManquantes(content, current, { combler = false } = {}) {
+    const toutes = (content?.imagePrompts || []).map((p, i) => ({ ...p, role: IMAGE_ROLES[i] || 'detail' }));
+    const deja = recordImages(current).filter((p) => p.source === 'client' || (combler && p.source === 'ia'));
+    return imagesAFaire(toutes, deja, { cible: TARGET_VISUALS });
+  }
+
+  function startImages(content, current, { more = false, combler = false } = {}) {
     imgAbortRef.current?.abort();
     const ctl = new AbortController();
     imgAbortRef.current = ctl;
-    const photos = (current.brief?.photos || []).length;
-    const base = more ? current.aiImages || [] : [];
-    const prompts = (content.imagePrompts || []).slice(0, more ? Math.max(4, aiImagesNeeded(photos)) : aiImagesNeeded(photos));
+    const photos = recordImages(current).filter((p) => p.source === 'client');
+    const base = more || combler ? current.aiImages || [] : [];
+    let choix = imagesManquantes(content, current, { combler });
+    if (more && !choix.length) choix = (content.imagePrompts || []).slice(0, 4).map((p, i) => ({ ...p, role: IMAGE_ROLES[i] }));
+    // Les images créées ressemblent au vrai lieu et aux vrais produits vus sur les photos
+    const style = current.photoStyle ? ` Match the look of the real business: ${current.photoStyle}.` : '';
+    const prompts = choix.map((p) => ({ ...p, prompt: (p.prompt + style).slice(0, 590) }));
     if (imageGen && current.brief?.aiImages !== false && prompts.length) {
       setImgStatus({ state: 'running', done: 0, total: prompts.length });
       const genOne = async (p, signal) => {
         const img = await imageGen(p, signal);
-        return uploadImage(`/api/agence/clients/${id}/images`, img.blob, { kind: 'ia', alt: img.alt || p.alt || '', filename: 'image-ia.jpg', batch: current.imageBatch || '', signal });
+        return uploadImage(`/api/agence/clients/${id}/images`, img.blob, { kind: 'ia', alt: img.alt || p.alt || '', filename: 'image-ia.jpg', batch: current.imageBatch || '', role: p.role, signal });
       };
       generateImages(genOne, prompts, {
         signal: ctl.signal,
         onImage: (list) => {
           if (ctl.signal.aborted) return;
-          setRec((r) => ({ ...r, aiImages: [...base, ...list] }));
+          // Rôle et taille de chaque image : elle va tout de suite au bon endroit dans les aperçus
+          const infos = Object.fromEntries(list.filter((x) => x.role).map((x) => [x.id, { role: x.role, ...(x.w ? { w: x.w, h: x.h } : {}), ia: true }]));
+          setRec((r) => ({ ...r, aiImages: [...base, ...list.map(({ id: i, ext, alt }) => ({ id: i, ext, alt }))], imageInfo: { ...(r.imageInfo || {}), ...infos } }));
           setImgStatus((st) => ({ ...st, done: list.length }));
         },
       }).then(({ images: done, errors }) => {
@@ -594,7 +717,7 @@ export default function ClientFile({ id, studioName }) {
       return;
     }
     setImgStatus({ state: 'idle' });
-    if (imagesFn && photos < 3 && content.imageKeywords?.length) {
+    if (imagesFn && photos.filter(imageUtilisable).length < 3 && content.imageKeywords?.length) {
       imagesFn(content.imageKeywords)
         .then((imgs) => {
           if (!ctl.signal.aborted && imgs?.length) save({ stockImages: imgs.slice(0, 12) }, null, true).catch(() => {});
@@ -624,7 +747,13 @@ export default function ClientFile({ id, studioName }) {
       const imageBatch = Math.random().toString(36).slice(2, 12);
       const client = await save({ result: r, status: 'generated', aiImages: [], stockImages: [], picked: [], choice: null, imageBatch }, `Propositions générées (${r.models.length} modèles${r.source === 'demo' ? ', textes génériques' : ''})`);
       setGen(null);
-      startImages(r.content, client);
+      // L'IA regarde d'abord les photos du client, puis crée les images qui manquent
+      // (de nouveau si un service a changé de nom depuis la dernière analyse)
+      const noms = new Set((r.content.services || []).map((x) => x.name));
+      const perime = recordImages(client).some((p) => p.source === 'client' && p.service && !noms.has(p.service));
+      const analyse = await analyserPhotos(client, { force: perime });
+      if (ctl.signal.aborted) return;
+      startImages(r.content, analyse);
     } catch (e) {
       if (ctl.signal.aborted || e?.code === 'cancelled') return;
       if (e?.partial) partialRef.current = e.partial;
@@ -754,6 +883,18 @@ export default function ClientFile({ id, studioName }) {
         onRegenerate={() => generate()}
         imgStatus={imgStatus}
         onRetryImages={imageGen ? () => startImages(rec.result.content, rec, { more: imgStatus.state !== 'failed' }) : null}
+        photos={
+          <PhotosClient
+            rec={rec}
+            srcOf={srcOf}
+            status={photoStatus}
+            onAnalyse={svc?.ai ? (force) => analyserPhotos(rec, { force }) : null}
+            onChoix={choixPhoto}
+            manquent={imageGen && rec.brief?.aiImages !== false ? imagesManquantes(rec.result.content, rec, { combler: true }).length : 0}
+            onFill={() => startImages(rec.result.content, rec, { combler: true })}
+            busy={imgStatus.state === 'running'}
+          />
+        }
         onClose={view === 'select' ? () => setView(null) : null}
       />
     );

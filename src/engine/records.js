@@ -1,4 +1,5 @@
 // Dossiers clients : étapes du parcours et images (code partagé navigateur / serveur)
+import { IMAGE_ROLES } from './placement.js';
 
 // Le « chemin de fer » d'un dossier : 6 étapes, dans l'ordre
 export const STAGES = [
@@ -50,10 +51,30 @@ export const CHECKS = [
 
 const extOf = (img) => (img.ext === 'png' ? 'png' : img.ext === 'webp' ? 'webp' : 'jpg');
 
+const CHAMPS_INFO = ['role', 'sujet', 'service', 'qualite', 'raison', 'w', 'h', 'choix'];
+
+// Ce que l'on sait d'une image (analyse des photos, rôle des images IA) : sert à la placer
+function avecInfos(rec, p, source) {
+  const out = { ...p, source };
+  const info = rec.imageInfo;
+  if (!info || typeof info !== 'object') return out;
+  const x = info[p.id] || {};
+  for (const k of CHAMPS_INFO) if (x[k] !== undefined && x[k] !== '') out[k] = x[k];
+  if (x.utilisable === false) out.utilisable = false;
+  // Image IA d'avant (sans rôle noté) : retrouvé d'après sa description
+  if (!out.role && source === 'ia' && !p.reel && p.alt) {
+    const k = (rec.result?.content?.imagePrompts || rec.content?.imagePrompts || []).findIndex((q) => q?.alt && q.alt === p.alt);
+    if (k >= 0) out.role = IMAGE_ROLES[k] || '';
+  }
+  if (!out.alt && x.sujet) out.alt = x.sujet;
+  return out;
+}
+
 // Ordre d'utilisation dans les sites : photos du client, images IA, puis photos libres de droits
+// (avec des photos analysées, chaque emplacement prend l'image qui lui convient : placement.js)
 export function recordImages(rec) {
-  const photos = (rec.brief?.photos || []).map((p) => ({ ...p, source: 'client' }));
-  const ai = (rec.aiImages || []).map((p) => ({ ...p, source: 'ia' }));
+  const photos = (rec.brief?.photos || []).map((p) => avecInfos(rec, p, 'client'));
+  const ai = (rec.aiImages || []).map((p) => avecInfos(rec, p, 'ia'));
   const stock = ai.length ? [] : (rec.stockImages || []).map((p) => ({ ...p, source: 'unsplash' }));
   return [...photos, ...ai, ...stock];
 }

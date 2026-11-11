@@ -25,6 +25,12 @@ export function questionnaireView(rec) {
   };
 }
 
+// Placement des images, sans les remarques de l'IA sur les photos (réservées à l'agence)
+export function infosPubliques(info) {
+  if (!info || typeof info !== 'object') return null;
+  return Object.fromEntries(Object.entries(info).map(([k, { raison, at, analyse, ...x }]) => [k, x]));
+}
+
 export function proposalsView(rec) {
   if (!PROPOSED.includes(rec.status) || !rec.result) return { id: rec.id, ready: false, name: rec.brief?.businessName || rec.name };
   const byId = Object.fromEntries((rec.result.models || []).map((m) => [m.id, m]));
@@ -44,6 +50,7 @@ export function proposalsView(rec) {
     chosenModel: rec.choice ? byId[rec.choice.modelId] || null : null,
     aiImages: rec.aiImages || [],
     stockImages: rec.stockImages || [],
+    imageInfo: infosPubliques(rec.imageInfo),
     choice: rec.choice,
     liveUrl: rec.status === 'live' ? rec.liveUrl : '',
   };

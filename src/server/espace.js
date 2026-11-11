@@ -20,6 +20,8 @@ import { mailPret, envoyerMail, emailValide } from './mail.js';
 import { editable, nettoyer, appliquer, fusion3, resume, assurerIds, aujourdhui, peutModifier, gestionValide, LIMITE_JOUR, memeEtat, RAISONS_ATTENTE } from '../engine/espace.js';
 import { servicesLabel } from '../engine/render.js';
 import { PAGES } from '../engine/questions.js';
+import { heriterInfos } from './photosIa.js';
+import { infosPubliques } from './public.js';
 
 export const DUREE = { invitation: 7 * 86400e3, appareil: 15 * 60e3, email: 15 * 60e3, session: 180 * 86400e3 };
 const MAX_APPAREILS = 8;
@@ -234,7 +236,7 @@ export function vueEspace(rec, { role, appareil = null, settings }) {
       publieLe: rec.publication?.publishedAt || '',
       auto: Boolean(rec.publication?.repo && rec.publication?.projectId),
     },
-    dossier: { id: rec.id, brief: d.brief, content: d.content, model, aiImages: d.aiImages, stockImages: rec.stockImages || [], hosting: settings?.hosting || '' },
+    dossier: { id: rec.id, brief: d.brief, content: d.content, model, aiImages: d.aiImages, stockImages: rec.stockImages || [], imageInfo: infosPubliques(rec.imageInfo), hosting: settings?.hosting || '' },
     etat: etatActuel(rec),
     boutique: rec.brief?.siteType === 'boutique',
     servicesLabel: servicesLabel(rec.brief || {}),
@@ -286,6 +288,9 @@ export function enregistrerEtat(r, { etat, changements, par, validePar = null, a
   const appli = appliquer(dossierDe(r), etat);
   const b = { ...(r.brief || {}) };
   for (const k of ['hours', 'phone', 'email', 'address', 'instagram', 'facebook', 'photos']) b[k] = appli.brief[k];
+  // Une image remplacée par le client garde la place de l'ancienne dans le site
+  heriterInfos(r, r.brief?.photos || [], b.photos || []);
+  heriterInfos(r, r.aiImages || [], appli.aiImages || []);
   r.brief = b;
   r.briefRev = (r.briefRev || 0) + 1;
   r.result = { ...r.result, content: appli.content };

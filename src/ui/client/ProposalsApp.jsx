@@ -68,7 +68,7 @@ export default function ProposalsApp({ id }) {
   const client = data?.client;
   const studio = data?.studio;
   const owner = studio?.ownerName || 'Votre interlocuteur';
-  const rec = useMemo(() => (client?.ready ? { id, brief: client.brief, aiImages: client.aiImages, stockImages: client.stockImages } : null), [client, id]);
+  const rec = useMemo(() => (client?.ready ? { id, brief: client.brief, aiImages: client.aiImages, stockImages: client.stockImages, imageInfo: client.imageInfo, content: client.content } : null), [client, id]);
   const brief = useMemo(() => (rec ? renderBrief(rec, origin) : null), [rec, origin]);
   const images = useMemo(() => (rec ? renderImages(rec, origin) : []), [rec, origin]);
   const thumbs = useMemo(() => (client?.ready && origin ? client.models.map((m) => renderPage('index', { brief, content: client.content, model: m, images, mode: 'preview', imageSize: 'thumb' })) : []), [client, brief, images, origin]);

@@ -6,6 +6,7 @@ import { BASE_CSS, ESPACE_CSS } from './css.js';
 import { art } from './art.js';
 import { icon } from './icons.js';
 import { esc, rng, pick, formatPrice, priceNumber, slugify, lines, hashString } from './util.js';
+import { distributeur, imageUtilisable, memeService } from './placement.js';
 import { mix, onColor, ensureContrast, isHex, luminance, alpha } from './color.js';
 import { aujourdhui, jourValide, decaler, jourTexte, fenetreAnnonce, dansFenetre, texteAnnonce, iconeDe, iconeSvg, feteParId, motifUrl } from './espace.js';
 
@@ -140,6 +141,17 @@ function parseReviews(text) {
 
 // ---------- Contexte de rendu ----------
 
+// La page affiche-t-elle une image à côté de chaque service ? (les photos d'un service lui sont alors gardées)
+const VARIANTES_IMAGEES = new Set(['alternate', 'cards']);
+function servicesIllustres(m, brief, content, page) {
+  if (!(content.services || []).length) return false;
+  const shop = brief.siteType === 'boutique';
+  if (page === 'services') return VARIANTES_IMAGEES.has(shop ? m.variants?.services : m.offerVariant);
+  if (page !== 'index' && page) return false;
+  const t = (m.tokens || []).find((x) => x.name === (shop ? 'offer2' : 'offer'));
+  return Boolean(t) && VARIANTES_IMAGEES.has(shop ? m.variants?.services : t.v || m.variants?.services);
+}
+
 function makeCtx({ brief, content, model, images, mode, page, imageSize, jour }) {
   const m = resolveModel(model);
   const arch = m.arch;
@@ -147,13 +159,31 @@ function makeCtx({ brief, content, model, images, mode, page, imageSize, jour })
   const pages = sitePages(brief, content);
   const has = (slug) => pages.some((p) => p.slug === slug);
   const link = (slug) => (mode === 'export' ? `href="${slug}.html"` : `href="#${slug}" data-page="${slug}"`);
-  const imgs = Array.isArray(images) ? images.filter((i) => i && i.url) : [];
+  const toutes = Array.isArray(images) ? images.filter((i) => i && i.url) : [];
+  // Images « placées par rôle » : photos du client analysées par l'IA, images IA décrites.
+  // Les photos écartées (floues, captures, logo…) ne vont pas dans le site.
+  const parRoles = toutes.some((i) => i.role || i.choix || i.utilisable === false);
+  const imgs = parRoles ? toutes.filter(imageUtilisable) : toutes;
   const n = imgs.length;
-  // Répartition des images : chaque emplacement reçoit l'image suivante.
-  // Sans photo du client, chaque style démarre sur une image différente.
-  let ptr = n && imgs[0].source !== 'client' ? hashString(arch.id) % n : 0;
-  const take = (k) => Array.from({ length: k }, () => ptr++);
-  const takeDistinct = (k) => take(n ? Math.min(k, n) : k);
+  let take;
+  if (parRoles) {
+    // Chaque emplacement (haut de page, service, à propos, galerie…) prend l'image qui lui va le mieux
+    const choisir = distributeur(imgs, { graine: arch.id, avecServices: servicesIllustres(m, brief, content, page) });
+    take = (k, kind = 'page', opts = {}) => {
+      const eviter = new Set();
+      return Array.from({ length: k }, () => {
+        const i = choisir(kind, { ...opts, eviter });
+        eviter.add(i);
+        return i;
+      });
+    };
+  } else {
+    // Dossiers d'avant : chaque emplacement reçoit l'image suivante.
+    // Sans photo du client, chaque style démarre sur une image différente.
+    let ptr = n && imgs[0].source !== 'client' ? hashString(arch.id) % n : 0;
+    take = (k) => Array.from({ length: k }, () => ptr++);
+  }
+  const takeDistinct = (k, kind) => take(n ? Math.min(k, n) : k, kind);
 
   const imgAt = (slot) => (n ? imgs[((slot % n) + n) % n] : null);
   const visualInner = (slot, artOpts = {}) => {
@@ -333,28 +363,28 @@ function hero(ctx) {
   const dc = deco(ctx, 'hero');
   switch (v) {
     case 'overlay':
-      return `<section class="hero hero-overlay"><div class="hero-bg visual">${visualInner(take(1)[0])}</div><div class="wrap hero-inner">${text}</div></section>`;
+      return `<section class="hero hero-overlay"><div class="hero-bg visual">${visualInner(take(1, 'hero-bg')[0])}</div><div class="wrap hero-inner">${text}</div></section>`;
     case 'cover':
-      return `<section class="hero hero-cover"><div class="hero-bg visual">${visualInner(take(1)[0])}</div><div class="wrap hero-inner"><h1>${h}</h1><div class="cover-foot"><p class="lead">${sub}</p>${actions}</div></div></section>`;
+      return `<section class="hero hero-cover"><div class="hero-bg visual">${visualInner(take(1, 'hero-bg')[0])}</div><div class="wrap hero-inner"><h1>${h}</h1><div class="cover-foot"><p class="lead">${sub}</p>${actions}</div></div></section>`;
     case 'panel':
-      return `<section class="hero hero-panel"><div class="hero-bg visual">${visualInner(take(1)[0])}</div><div class="wrap hero-inner"><div class="panel">${text}</div></div></section>`;
+      return `<section class="hero hero-panel"><div class="hero-bg visual">${visualInner(take(1, 'hero-bg')[0])}</div><div class="wrap hero-inner"><div class="panel">${text}</div></div></section>`;
     case 'bigtype':
-      return `<section class="hero hero-bigtype">${dc}<div class="wrap hero-inner"><h1>${h}</h1><div class="hero-row"><p class="lead">${sub}</p>${actions}</div>${visual('hero-visual', take(1)[0])}</div></section>`;
+      return `<section class="hero hero-bigtype">${dc}<div class="wrap hero-inner"><h1>${h}</h1><div class="hero-row"><p class="lead">${sub}</p>${actions}</div>${visual('hero-visual', take(1, 'hero')[0])}</div></section>`;
     case 'centered':
-      return `<section class="hero hero-centered">${dc}<div class="wrap"><div class="hero-inner">${text}</div>${visual('hero-visual', take(1)[0])}</div></section>`;
+      return `<section class="hero hero-centered">${dc}<div class="wrap"><div class="hero-inner">${text}</div>${visual('hero-visual', take(1, 'hero')[0])}</div></section>`;
     case 'framed':
-      return `<section class="hero hero-framed">${dc}<div class="wrap hero-inner"><div class="frame">${visual('hero-visual', take(1)[0])}</div><div>${text}</div></div></section>`;
+      return `<section class="hero hero-framed">${dc}<div class="wrap hero-inner"><div class="frame">${visual('hero-visual', take(1, 'hero')[0])}</div><div>${text}</div></div></section>`;
     case 'mosaic': {
-      const s = take(3);
+      const s = take(3, 'mosaic');
       return `<section class="hero hero-mosaic">${dc}<div class="wrap hero-inner"><div>${text}</div><div class="mosaic">${visual('', s[0])}${visual('', s[1])}${visual('', s[2])}</div></div></section>`;
     }
     case 'collage': {
-      const s = take(3);
+      const s = take(3, 'mosaic');
       return `<section class="hero hero-collage">${dc}<div class="wrap hero-inner"><div>${text}</div><div class="collage">${visual('c1', s[0])}${visual('c2', s[1])}${visual('c3', s[2])}</div></div></section>`;
     }
     case 'split':
     default:
-      return `<section class="hero hero-split">${dc}<div class="wrap hero-inner"><div>${text}</div>${visual('hero-visual', take(1)[0])}</div></section>`;
+      return `<section class="hero hero-split">${dc}<div class="wrap hero-inner"><div>${text}</div>${visual('hero-visual', take(1, 'hero')[0])}</div></section>`;
   }
 }
 
@@ -388,9 +418,21 @@ function highlights(ctx, alt, v) {
   if (v === 'bento') {
     const cells = items.map((it) => card(it, ' bento-card'));
     while (cells.length < 4) cells.push(`<div class="bento-card bento-accent"><p>${esc(c.brand?.tagline || ctx.name)}</p></div>`);
-    return `<section class="${sec(alt)}"><div class="wrap">${head}<div class="bento">${cells[0]}${ctx.visual('bento-img', ctx.take(1)[0])}${cells[1]}${cells[2]}${cells[3]}</div></div></section>`;
+    return `<section class="${sec(alt)}"><div class="wrap">${head}<div class="bento">${cells[0]}${ctx.visual('bento-img', ctx.take(1, 'bento')[0])}${cells[1]}${cells[2]}${cells[3]}</div></div></section>`;
   }
   return `<section class="${sec(alt, `feat-${v}`)}"><div class="wrap">${head}<div class="features">${items.map((it) => card(it)).join('')}</div></div></section>`;
+}
+
+// Images des services : d'abord ceux qui ont leur propre photo, puis les autres
+function slotsServices(ctx, items) {
+  const slots = new Array(items.length);
+  items.forEach((s, i) => {
+    if (ctx.imgs.some((img) => memeService(img, s))) slots[i] = ctx.take(1, 'service', { service: s.name })[0];
+  });
+  items.forEach((s, i) => {
+    if (slots[i] === undefined) slots[i] = ctx.take(1, 'service', { service: s.name })[0];
+  });
+  return slots;
 }
 
 function servicesList(ctx, items, v) {
@@ -404,7 +446,7 @@ function servicesList(ctx, items, v) {
       .join('')}</div>`;
   }
   if (v === 'alternate') {
-    const slots = ctx.take(items.length);
+    const slots = slotsServices(ctx, items);
     return `<div class="svc-alternate">${items
       .map((s, i) => {
         const price = prixService(ctx, s);
@@ -413,7 +455,7 @@ function servicesList(ctx, items, v) {
       .join('')}</div>`;
   }
   if (v === 'cards') {
-    const slots = ctx.take(items.length);
+    const slots = slotsServices(ctx, items);
     return `<div class="svc-cards n-${items.length}">${items
       .map((s, i) => {
         const price = prixService(ctx, s);
@@ -497,14 +539,14 @@ function aboutTeaser(ctx, alt, v) {
   if (v === 'quote') {
     return `<section class="${sec(alt)}"><div class="wrap about-quote"><blockquote>${esc(a.quote || a.intro)}</blockquote>${more}</div></section>`;
   }
-  return `<section class="${sec(alt)}"><div class="wrap about-split">${visual('about-visual', ctx.take(1)[0])}<div><h2>${esc(a.title || 'Qui sommes-nous')}</h2><p class="lead">${esc(a.intro)}</p>${more}</div></div></section>`;
+  return `<section class="${sec(alt)}"><div class="wrap about-split">${visual('about-visual', ctx.take(1, 'about')[0])}<div><h2>${esc(a.title || 'Qui sommes-nous')}</h2><p class="lead">${esc(a.intro)}</p>${more}</div></div></section>`;
 }
 
 function gallery(ctx, alt, v = 'grid', { title } = {}) {
   const { imgs, content: c } = ctx;
   if (imgs.length < 3) return '';
   const want = { masonry: 6, grid: 6, strip: 8, polaroid: 5, bento: 4 }[v] || 6;
-  let slots = ctx.takeDistinct(want);
+  let slots = ctx.takeDistinct(want, 'gallery');
   if (v === 'grid' && slots.length > 3 && slots.length < 6) slots = slots.slice(0, 3);
   const ratios = ['4/5', '1/1', '3/4', '4/3', '1/1', '4/5'];
   const showCap = v === 'polaroid' || v === 'masonry';
@@ -522,14 +564,14 @@ function gallery(ctx, alt, v = 'grid', { title } = {}) {
 function band(ctx, v = 'plain') {
   const { content: c } = ctx;
   if (v === 'duo') {
-    const s = ctx.take(2);
+    const s = ctx.take(2, 'duo');
     return `<section class="band band-duo">${ctx.visual('', s[0])}${ctx.visual('', s[1])}</section>`;
   }
   const q = c.about?.quote || c.statement;
   if (v === 'quote' && q) {
-    return `<section class="band band-quote"><div class="band-bg visual">${ctx.visualInner(ctx.take(1)[0])}</div><div class="wrap band-inner"><blockquote>${esc(q)}</blockquote></div></section>`;
+    return `<section class="band band-quote"><div class="band-bg visual">${ctx.visualInner(ctx.take(1, 'band')[0])}</div><div class="wrap band-inner"><blockquote>${esc(q)}</blockquote></div></section>`;
   }
-  return `<section class="band band-plain">${ctx.visual('', ctx.take(1)[0])}</section>`;
+  return `<section class="band band-plain">${ctx.visual('', ctx.take(1, 'band')[0])}</section>`;
 }
 
 function processBlock(ctx, alt, v = 'line') {
@@ -541,7 +583,7 @@ function processBlock(ctx, alt, v = 'line') {
     .map((st, i) => `<li class="step"><span class="step-num">${i + 1}</span><div><h3>${esc(st.title)}</h3>${st.text ? `<p>${esc(st.text)}</p>` : ''}</div></li>`)
     .join('')}</ol>`;
   if (v === 'image') {
-    return `<section class="${sec(alt, 'process-sec')}"><div class="wrap process-image">${ctx.visual('process-visual', ctx.take(1)[0])}<div>${head}${list}</div></div></section>`;
+    return `<section class="${sec(alt, 'process-sec')}"><div class="wrap process-image">${ctx.visual('process-visual', ctx.take(1, 'process')[0])}<div>${head}${list}</div></div></section>`;
   }
   return `<section class="${sec(alt, 'process-sec')}">${deco(ctx, 'process')}<div class="wrap">${head}${list}</div></section>`;
 }
@@ -583,7 +625,7 @@ function ctaBlock(ctx, v, alt = false) {
     return `<section class="${sec(alt, 'cta-split')}"><div class="wrap cta-inner"><div><h2>${title}</h2>${text ? `<p class="lead">${text}</p>` : ''}<a class="btn" ${cta.href}>${esc(cta.label)}</a></div><div class="cta-contact">${links.join('')}</div></div></section>`;
   }
   if (v === 'image') {
-    return `<section class="cta-image"><div class="band-bg visual">${ctx.visualInner(ctx.take(1)[0])}</div><div class="wrap cta-image-inner"><h2>${title}</h2>${text ? `<p>${text}</p>` : ''}<a class="btn" ${cta.href}>${esc(cta.label)}</a></div></section>`;
+    return `<section class="cta-image"><div class="band-bg visual">${ctx.visualInner(ctx.take(1, 'band')[0])}</div><div class="wrap cta-image-inner"><h2>${title}</h2>${text ? `<p>${text}</p>` : ''}<a class="btn" ${cta.href}>${esc(cta.label)}</a></div></section>`;
   }
   return `<section class="cta-band"><div class="wrap"><div><h2>${title}</h2>${text ? `<p>${text}</p>` : ''}</div><a class="btn" ${cta.href}>${esc(cta.label)}</a></div></section>`;
 }
@@ -753,7 +795,7 @@ function aboutBody(ctx) {
   const galTok = m.tokens.find((x) => x.name === 'gallery');
   return (
     pageHero(ctx, a.title || 'À propos', a.intro) +
-    `<section class="section"><div class="wrap prose-grid"><div class="story">${story}</div>${visual('about-visual', ctx.take(1)[0])}</div></section>` +
+    `<section class="section"><div class="wrap prose-grid"><div class="story">${story}</div>${visual('about-visual', ctx.take(1, 'about')[0])}</div></section>` +
     (values ? `<section class="section alt"><div class="wrap">${sectionHead(a.valuesTitle || 'Ce qui nous guide', '', false)}<div class="values">${values}</div></div></section>` : '') +
     gallery(ctx, false, galTok?.v === 'strip' ? 'strip' : 'grid') +
     ctaBlock(ctx)
