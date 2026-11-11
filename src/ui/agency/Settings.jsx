@@ -97,6 +97,7 @@ export default function Settings({ studioName }) {
             {pub && <PublishSettings pub={pub} value={!!s.autoPublish} onChange={(v) => setS({ ...s, autoPublish: v })} />}
             {services && <Services services={services} />}
             <Alertes value={s.alertesEmail !== false} onChange={(v) => setS({ ...s, alertesEmail: v })} emailEnregistre={/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(emailEnregistre.trim()) ? emailEnregistre.trim() : ''} />
+            <InspirationReglage value={s.inspirationAuto !== false} onChange={(v) => setS({ ...s, inspirationAuto: v })} />
             <div className="form-actions">
               <button type="submit" className="btn primary" disabled={busy}>
                 {busy ? 'Enregistrement…' : 'Enregistrer'}
@@ -126,6 +127,25 @@ export default function Settings({ studioName }) {
           </section>
         )}
       </main>
+    </div>
+  );
+}
+
+// Agent d'inspiration : part tout seul à chaque questionnaire reçu (sauf si on le coupe ici)
+function InspirationReglage({ value, onChange }) {
+  return (
+    <div className="q-field pub-settings">
+      <span className="q-label">Agent d’inspiration</span>
+      <p className="q-hint">
+        Quand un client envoie son questionnaire, l’agent visite les sites qu’il a cités et quelques très bons sites de son métier, les prend en capture et note leurs fonctionnalités. Tout est rangé dans la page <a href="/agence/inspiration">Inspiration</a>, et les pistes nourrissent la génération des modèles. Compte environ 0,20 à 0,40 € de crédit Claude par questionnaire, moins quand la bibliothèque connaît déjà le métier.
+      </p>
+      <label className="q-toggle compact">
+        <input type="checkbox" checked={value} onChange={(e) => onChange(e.target.checked)} />
+        <span>
+          <span className="q-option-title">Lancer l’agent à chaque questionnaire reçu</span>
+          <span className="q-option-hint">Décoché, il ne part plus tout seul : tu peux toujours le lancer depuis un dossier, bouton « Chercher de l’inspiration ».</span>
+        </span>
+      </label>
     </div>
   );
 }

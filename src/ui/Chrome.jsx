@@ -18,6 +18,7 @@ export function AgencyBar({ studioName = 'Studio Site', current = 'clients' }) {
     ['controle', '/controle', 'Contrôle'],
     ['clients', '/agence', 'Clients'],
     ['atelier', '/agence/atelier', 'Atelier libre'],
+    ['inspiration', '/agence/inspiration', 'Inspiration'],
     ['reglages', '/agence/reglages', 'Réglages'],
   ];
   async function logout() {

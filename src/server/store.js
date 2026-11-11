@@ -287,6 +287,8 @@ export const DEFAULT_SETTINGS = {
   fraisFixesHisto: [],
   // E-mail quand un site tombe en panne (surveillance automatique toutes les 5 minutes)
   alertesEmail: true,
+  // Agent d'inspiration : visite et analyse des sites du métier à chaque questionnaire reçu
+  inspirationAuto: true,
 };
 
 export async function getSettings() {
@@ -300,6 +302,7 @@ export async function saveSettings(input) {
   for (const k of Object.keys(DEFAULT_SETTINGS)) if (typeof DEFAULT_SETTINGS[k] === 'string' && typeof input?.[k] === 'string') s[k] = input[k].slice(0, 300).trim();
   if (typeof input?.autoPublish === 'boolean') s.autoPublish = input.autoPublish;
   if (typeof input?.alertesEmail === 'boolean') s.alertesEmail = input.alertesEmail;
+  if (typeof input?.inspirationAuto === 'boolean') s.inspirationAuto = input.inspirationAuto;
   // Domaines de test de l'Atelier libre (les derniers utilisés, pour les reproposer)
   if (Array.isArray(input?.domainesTest)) s.domainesTest = [...new Set(input.domainesTest.map((d) => String(d || '').trim().toLowerCase()).filter((d) => /^[a-z0-9.-]{4,253}$/.test(d)))].slice(0, 6);
   if (Array.isArray(input?.charges)) {
@@ -405,6 +408,60 @@ export async function readImage(clientId, imgId) {
   });
   if (!res || res.statusCode !== 200) return null;
   return { stream: res.stream, contentType: res.blob.contentType, etag: res.blob.etag };
+}
+
+// ---------- Inspiration : sites visités par l'agent (bibliothèque commune à tous les dossiers) ----------
+//   inspiration/index.json          résumé de chaque site (page Inspiration, réutilisation par métier)
+//   inspiration/attente.json        dossiers dont l'agent n'a pas fini (repris par la surveillance)
+//   inspiration/sites/<site>.json   fiche complète d'un site : relevé, analyse, captures
+//   inspiration/captures/<capture>  captures d'écran (JPEG), jamais réécrites
+const SITE_RE = /^[a-f0-9]{16}$/;
+const CAPTURE_RE = /^[a-f0-9]{16}-[a-z0-9-]{2,24}$/;
+export const siteIdValide = (id) => typeof id === 'string' && SITE_RE.test(id);
+export const captureIdValide = (id) => typeof id === 'string' && CAPTURE_RE.test(id);
+export const INSPIRATION_INDEX_VIDE = { sites: {} };
+export const INSPIRATION_ATTENTE_VIDE = { dossiers: {} };
+
+export async function getInspirationIndex() {
+  if (storageMode() === 'none') return { ...INSPIRATION_INDEX_VIDE };
+  const cur = await readJson('inspiration/index.json');
+  return { ...INSPIRATION_INDEX_VIDE, ...(cur?.data || {}) };
+}
+export function updateInspirationIndex(fn) {
+  return upsertJson('inspiration/index.json', INSPIRATION_INDEX_VIDE, (s) => fn({ ...INSPIRATION_INDEX_VIDE, ...s }));
+}
+export async function getInspirationAttente() {
+  if (storageMode() === 'none') return { ...INSPIRATION_ATTENTE_VIDE };
+  const cur = await readJson('inspiration/attente.json').catch(() => null);
+  return { ...INSPIRATION_ATTENTE_VIDE, ...(cur?.data || {}) };
+}
+export function updateInspirationAttente(fn) {
+  return upsertJson('inspiration/attente.json', INSPIRATION_ATTENTE_VIDE, (s) => fn({ ...INSPIRATION_ATTENTE_VIDE, ...s }));
+}
+export async function getFicheSite(siteId) {
+  if (!siteIdValide(siteId)) return null;
+  const cur = await readJson(`inspiration/sites/${siteId}.json`);
+  return cur?.data || null;
+}
+export async function saveFicheSite(siteId, fiche) {
+  if (!siteIdValide(siteId)) throw new StoreError('Site invalide.', 'bad_id', 400);
+  await writeRaw(`inspiration/sites/${siteId}.json`, JSON.stringify(fiche), { contentType: 'application/json' });
+}
+export async function saveCapture(captureId, buffer) {
+  if (!captureIdValide(captureId)) throw new StoreError('Capture invalide.', 'bad_id', 400);
+  if (!buffer?.length || buffer.length > 8 * 1024 * 1024) throw new StoreError('Capture trop lourde.', 'too_big', 413);
+  await writeRaw(`inspiration/captures/${captureId}`, buffer, { contentType: 'image/jpeg', cacheSeconds: 60 * 60 * 24 * 30 });
+}
+export async function readCapture(captureId) {
+  if (!captureIdValide(captureId)) return null;
+  const raw = await readRaw(`inspiration/captures/${captureId}`);
+  return raw ? { buffer: raw.buffer, contentType: 'image/jpeg' } : null;
+}
+// Un site retiré de la bibliothèque : sa fiche, puis ses captures
+export async function supprimerFicheSite(siteId, captures = []) {
+  if (!siteIdValide(siteId)) return;
+  const ids = captures.map((c) => (typeof c === 'string' ? c : c?.id)).filter(captureIdValide);
+  await removePrefix(`inspiration/captures/${siteId}-`, [`inspiration/sites/${siteId}.json`, ...ids.map((c) => `inspiration/captures/${c}`)]);
 }
 
 // ---------- Appli Devis & Factures (option vendue aux clients) ----------

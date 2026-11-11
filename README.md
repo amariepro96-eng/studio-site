@@ -89,7 +89,20 @@ Chaque site livré a son espace, ouvert depuis le dossier du client (bloc **Espa
 
 Un site qui a un espace client se modifie depuis Studio Site (dossier ou vue agence), plus à la main dans GitHub : une modification faite directement dans le dépôt serait remplacée à la publication suivante.
 
-Chaque génération complète fait 3 appels à l'API Claude, plus 0 à 8 images Gemini selon le nombre de photos fournies. Les coûts dépendent des modèles choisis : consultez les grilles tarifaires (platform.claude.com, ai.google.dev/pricing) et fixez une limite de dépenses dans chaque console.
+### Agent d'inspiration
+
+Quand un client envoie son questionnaire (ou quand l'agence remplit le brief), un agent part tout seul, côté serveur :
+
+1. **Trouver les sites** : le site actuel du client (s'il a déjà un domaine), les sites qu'il a cités dans « Des sites ou marques que vous aimez », les meilleures fiches de la bibliothèque pour le même métier, et 5 nouveaux sites remarquables du métier trouvés par Claude avec la recherche web (outil `web_search`, à autoriser dans la console Claude : Settings › Capabilities ; sinon propositions de mémoire, signalées dans le dossier). Annuaires, réseaux sociaux et plateformes sont écartés.
+2. **Visiter** chaque site avec un Chromium sans écran (`@sparticuz/chromium` + `playwright-core`) : haut de page et page entière sur ordinateur, page d'accueil sur téléphone, 2 pages intérieures (carte, prestations, réservation…), relevé du menu, des titres, des boutons, des couleurs, des polices et des indices de fonctionnalités. robots.txt est respecté, les bannières de cookies sont refusées, aucun formulaire n'est rempli, seules les adresses publiques sont ouvertes (chaque requête passe par un gardien : réseau privé, métadonnées cloud, ports inhabituels et WebSocket bloqués). Un navigateur neuf par site.
+3. **Analyser** les captures avec Claude (vision) : style, palette, typographies, mise en page, fonctionnalités (liste fermée), idées réutilisables, défauts, style Studio Site le plus proche, note d'intérêt.
+4. **Rédiger des pistes** pour ce client : styles conseillés, fonctionnalités utiles (« Déjà prévu » ou « À proposer »), idées de sections, ton, erreurs à éviter, identité de son site actuel à garder.
+
+Les pistes s'ajoutent aux consignes de la génération des 10 modèles (bloc `<inspiration>`, après le brief), avec la règle : des idées, jamais de copie, et le brief reste la seule source des faits. Les fiches et captures (privées, `inspiration/` dans le stockage) forment la bibliothèque de la page **Inspiration** ; une fiche de moins d'un an est reprise sans nouvelle visite pour le client suivant du même métier.
+
+Le travail se fait par passages de moins de 5 minutes (`maxDuration` 300) : l'agent se relance lui-même par un appel signé (jeton « agent » de 10 minutes, tiré de `AGENCY_PASSWORD`), et la surveillance (`/api/cron/pilotage`, toutes les 5 minutes) reprend un dossier resté en plan. Réglages › **Agent d'inspiration** coupe le départ automatique ; le bouton du dossier marche toujours.
+
+Chaque génération complète fait 3 appels à l'API Claude, plus 0 à 8 images Gemini selon le nombre de photos fournies. L'agent d'inspiration ajoute, par questionnaire, une recherche web (8 recherches au plus), une analyse par nouveau site visité (7 au plus) et une synthèse. Les coûts dépendent des modèles choisis : consultez les grilles tarifaires (platform.claude.com, ai.google.dev/pricing) et fixez une limite de dépenses dans chaque console.
 
 Google fait évoluer ses modèles d'image : si la génération renvoie « modèle introuvable », mettez à jour `GEMINI_IMAGE_MODEL` d'après la liste de ai.google.dev/gemini-api/docs/image-generation.
 
@@ -102,6 +115,8 @@ npm run dev                  # http://localhost:3000 et http://localhost:3000/ag
 npm run build:demo           # construit dist/studio-site-demo.html (démo autonome)
 ```
 
+Agent d'inspiration en local : `npx playwright install chromium` une fois (ou `CHROMIUM_PATH` vers un Chromium installé). `INSPIRATION_CHROMIUM_SERVERLESS=1` utilise le Chromium compressé, comme sur Vercel.
+
 ## Organisation du code
 
 ```
@@ -111,6 +126,7 @@ app/                      Pages Next.js et routes API
   agence/clients/[id]     Dossier d'un client, de l'envoi du questionnaire à la mise en ligne
   agence/atelier          Atelier libre : essais (dossiers de test) et client de démo
   agence/reglages         Nom affiché, prénom, contact, hébergeur des mentions légales
+  agence/inspiration      Bibliothèque d'inspiration : sites visités par l'agent, captures, fiches
   questionnaire/[id]      Questionnaire du client (lien privé)
   propositions/[id]       Sélection de modèles et choix du client (lien privé)
   espace/[id]             Espace client : modifications du site en ligne (lien personnel, puis appareil reconnu)
@@ -140,6 +156,9 @@ src/server/publish.js     Mise en ligne automatique (GitHub + Vercel)
 src/server/espace.js      Espace client : liens, appareils, versions, publication
 src/server/mail.js        E-mails par Brevo (facultatif)
 src/server/drive.js       Rangement dans Google Drive : fiche brief, photos, .zip des versions (facultatif)
+src/server/inspiration.js Agent d'inspiration : recherche, visites, analyses, pistes, bibliothèque, relances
+src/server/navigateur.js  Navigateur sans écran : gardien d'adresses, robots.txt, bannières, captures, relevé
+src/engine/inspiration.js Fonctionnalités repérées, adresses, pistes ajoutées aux consignes
 src/engine/espace.js      Ce que le client peut modifier, contrôles, fusion, fêtes et annonces datées
 src/server/http.js        Accès agence, erreurs, nettoyage des réponses
 src/ui/                   Interface (questionnaire, galerie, aperçu)

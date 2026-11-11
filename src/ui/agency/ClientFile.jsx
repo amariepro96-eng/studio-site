@@ -7,6 +7,7 @@ import { AgencyForm } from '../Questionnaire.jsx';
 import Publication from './Publication.jsx';
 import EspaceAgence from './EspaceAgence.jsx';
 import DriveAgence from './DriveAgence.jsx';
+import InspirationDossier from './InspirationDossier.jsx';
 import DevisAgence from './DevisAgence.jsx';
 import SendBox from './SendBox.jsx';
 import { etatClient, aujourdhuiParis, euros, nomMois } from '../../engine/finances.js';
@@ -647,7 +648,7 @@ export default function ClientFile({ id, studioName }) {
   const images = useMemo(() => (rec ? renderImages(rec, origin) : []), [rec?.brief?.photos, rec?.aiImages, rec?.stockImages, rec?.imageInfo, rec?.result?.content?.imagePrompts, rec?.id, origin]); // eslint-disable-line react-hooks/exhaustive-deps
   const srcOf = useCallback((imgId) => `/api/files/${id}/${imgId}`, [id]);
 
-  const runner = svc?.ai ? apiRunner() : null;
+  const runner = svc?.ai ? apiRunner('', { dossier: id }) : null;
   const imageGen = svc?.aiImages ? apiImageGen() : null;
   const imagesFn = svc?.images ? apiImages() : null;
 
@@ -1030,6 +1031,7 @@ export default function ClientFile({ id, studioName }) {
                 </button>
               )}
             </section>
+            {!rec.demo && <InspirationDossier rec={rec} />}
             <FacturationResume rec={rec} />
             <DevisAgence rec={rec} settings={settings} onRecord={(client) => pendingRef.current === 0 && setRec(client)} />
             {essai ? (

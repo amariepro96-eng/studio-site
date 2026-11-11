@@ -5,6 +5,8 @@ import { schemaFor } from '../../../src/engine/schemas.js';
 import { validatePart } from '../../../src/engine/validate.js';
 import { parseJsonLoose } from '../../../src/engine/util.js';
 import { config, rateLimited, clientIp, cleanBrief } from '../../../src/server/config.js';
+import { getClient, validId } from '../../../src/server/store.js';
+import { pistesTexte } from '../../../src/engine/inspiration.js';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -76,7 +78,13 @@ export async function POST(req) {
     return fail(429, 'Trop de générations en peu de temps. Réessayez dans une heure.', 'too_many');
   }
 
-  const prompt = buildPrompt(part, brief);
+  // Dossier client : les pistes de l'agent d'inspiration (si elles sont prêtes) enrichissent les consignes
+  let inspiration = '';
+  if (validId(body?.dossier)) {
+    const rec = await getClient(body.dossier).catch(() => null);
+    inspiration = pistesTexte(rec?.inspiration?.pistes);
+  }
+  const prompt = buildPrompt(part, brief, { inspiration });
   const schema = schemaFor(part, brief);
   const client = new Anthropic({
     apiKey: cfg.apiKey,

@@ -1,8 +1,9 @@
 import { after } from 'next/server';
-import { route, ok, readBody, fail, sanitizeBrief } from '../../../../../src/server/http.js';
+import { route, ok, readBody, fail, sanitizeBrief, origine } from '../../../../../src/server/http.js';
 import { getClient, updateClient, deleteClient, STATUSES, validId, getSettings, getDevisEspace } from '../../../../../src/server/store.js';
 import { STAGES } from '../../../../../src/engine/records.js';
 import { driveStatus, envoyerVersDrive } from '../../../../../src/server/drive.js';
+import { demarrerInspiration } from '../../../../../src/server/inspiration.js';
 import { supprimerPublicationEssai } from '../../../../../src/server/publish.js';
 import { supprimerAppli } from '../../../../../src/server/devisAgence.js';
 
@@ -77,6 +78,12 @@ export const PATCH = route(
     if (!rec) return fail(404, 'Dossier introuvable.', 'not_found');
     if (stale) return fail(409, 'Le client a modifié ses réponses pendant que vous éditiez le brief. Rechargez la page pour repartir de sa dernière version.', 'stale');
     if (set.status === 'generated' && driveStatus().configured) after(() => envoyerVersDrive(id).catch((e) => console.warn('[drive]', e?.message)));
+    // Brief rempli ou enregistré par l'agence (dossier « Moi, avec ses infos » compris) : l'agent
+    // d'inspiration part aussi, une seule fois par dossier (sauf après un échec)
+    if (set.status === 'answered' || (set.brief && rec.status === 'answered')) {
+      const base = origine(req);
+      after(() => demarrerInspiration(id, base).catch((e) => console.warn('[inspiration]', e?.message)));
+    }
     return ok({ client: rec });
   },
   { agency: true }

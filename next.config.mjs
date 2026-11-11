@@ -21,6 +21,12 @@ const DEVIS = [
 
 const nextConfig = {
   reactStrictMode: true,
+  // Agent d'inspiration : navigateur sans écran (Chromium compressé) chargé tel quel par le serveur
+  serverExternalPackages: ['@sparticuz/chromium', 'playwright-core'],
+  // Les fichiers de Chromium ne sont pas importés par le code : on les joint aux fonctions qui l'utilisent
+  outputFileTracingIncludes: {
+    '/api/agence/inspiration/agent': ['./node_modules/@sparticuz/chromium/bin/**/*'],
+  },
   async headers() {
     return [
       { source: '/espace/:path*', headers: PRIVE },

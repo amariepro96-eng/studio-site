@@ -133,14 +133,24 @@ Réponds uniquement avec ce JSON :
 
 export const PARTS = ['concepts', 'core', 'pages'];
 
-export function buildPrompt(part, brief) {
+// Pistes de l'agent d'inspiration (texte déjà prêt, voir engine/inspiration.js) : placées juste après le brief
+function avecInspiration(user, part, inspiration) {
+  if (!inspiration) return user;
+  const consigne =
+    part === 'concepts'
+      ? "\nQuand une direction conseillée par les pistes d'inspiration convient au brief, classe-la parmi les premières. Les accroches restent les tiennes."
+      : '';
+  return user.replace('</brief>\n', `</brief>\n\n${inspiration}${consigne}\n`);
+}
+
+export function buildPrompt(part, brief, { inspiration = '' } = {}) {
   switch (part) {
     case 'concepts':
-      return { system: SYSTEM, user: conceptsPrompt(brief), maxTokens: 16000 };
+      return { system: SYSTEM, user: avecInspiration(conceptsPrompt(brief), part, inspiration), maxTokens: 16000 };
     case 'core':
-      return { system: SYSTEM, user: corePrompt(brief), maxTokens: 16000 };
+      return { system: SYSTEM, user: avecInspiration(corePrompt(brief), part, inspiration), maxTokens: 16000 };
     case 'pages':
-      return { system: SYSTEM, user: pagesPrompt(brief), maxTokens: 16000 };
+      return { system: SYSTEM, user: avecInspiration(pagesPrompt(brief), part, inspiration), maxTokens: 16000 };
     default:
       throw new Error('Partie inconnue : ' + part);
   }

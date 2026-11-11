@@ -99,15 +99,16 @@ export async function generateSite(brief, runner, { onPart, signal, done = {} } 
   };
 }
 
-// Appel au serveur Next.js (clé API gardée côté serveur)
-export function apiRunner(base = '') {
+// Appel au serveur Next.js (clé API gardée côté serveur). `dossier` : les pistes de l'agent
+// d'inspiration de ce dossier sont ajoutées aux consignes par le serveur.
+export function apiRunner(base = '', { dossier = '' } = {}) {
   return async (part, brief, signal, { retry = false } = {}) => {
     let res;
     try {
       res = await fetch(`${base}/api/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ part, brief, retry }),
+        body: JSON.stringify({ part, brief, retry, ...(dossier ? { dossier } : {}) }),
         signal,
       });
     } catch (e) {

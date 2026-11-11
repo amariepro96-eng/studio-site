@@ -1,9 +1,10 @@
 import { after } from 'next/server';
-import { route, ok, fail, readBody, sanitizeBrief } from '../../../../src/server/http.js';
+import { route, ok, fail, readBody, sanitizeBrief, origine } from '../../../../src/server/http.js';
 import { getClient, updateClient } from '../../../../src/server/store.js';
 import { questionnaireView, studioInfo, EDITABLE } from '../../../../src/server/public.js';
 import { rateLimited, clientIp } from '../../../../src/server/config.js';
 import { driveStatus, envoyerVersDrive } from '../../../../src/server/drive.js';
+import { demarrerInspiration } from '../../../../src/server/inspiration.js';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -52,5 +53,10 @@ export const PATCH = route(async (req, { id }) => {
   if (stale) return fail(409, 'Vos réponses ont été modifiées entre-temps, depuis un autre appareil ou par votre interlocuteur. Rechargez la page pour reprendre la dernière version.', 'stale');
   if (refused) return fail(409, 'Vos réponses ont déjà été prises en compte pour préparer vos propositions. Pour un changement, contactez votre interlocuteur.', 'locked');
   if (body?.submit && driveStatus().configured) after(() => envoyerVersDrive(id, { parClient: true }).catch((e) => console.warn('[drive]', e?.message)));
+  // Questionnaire reçu : l'agent d'inspiration part chercher et analyser des sites du métier
+  if (body?.submit) {
+    const base = origine(req);
+    after(() => demarrerInspiration(id, base).catch((e) => console.warn('[inspiration]', e?.message)));
+  }
   return ok({ client: questionnaireView(rec) });
 });

@@ -1,5 +1,6 @@
 import { safeEqual, origine } from '../../../../src/server/http.js';
 import { verificationAutomatique } from '../../../../src/server/alertes.js';
+import { reprendreInspirations } from '../../../../src/server/inspiration.js';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -16,6 +17,12 @@ export async function GET(req) {
     if (r?.erreurs?.length) console.warn('[surveillance] e-mail en échec :', r.erreurs[0]);
   } catch (e) {
     console.error('[surveillance]', e?.name, String(e?.message || '').slice(0, 200));
+  }
+  // Agents d'inspiration restés en plan : relancés (chaque relance part dans sa propre fonction)
+  try {
+    await reprendreInspirations(origine(req));
+  } catch (e) {
+    console.error('[inspiration] reprise', e?.name, String(e?.message || '').slice(0, 200));
   }
   return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } });
 }
