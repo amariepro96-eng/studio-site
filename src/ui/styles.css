@@ -7529,6 +7529,258 @@ fieldset.dv-bloc legend + * {
   padding-top: 14px;
   border-top: 1px solid var(--line);
 }
+/* Collecte en amont : remplir la bibliothèque à l'avance */
+.collecte {
+  padding: 20px 22px;
+  margin-bottom: 22px;
+}
+.collecte-tete {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+}
+.ss .collecte h2 {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 1.35rem;
+  margin: 0 0 2px;
+}
+.collecte-tete p {
+  margin: 0;
+}
+.collecte-intro {
+  margin: 12px 0 0;
+  max-width: 70ch;
+}
+.collecte-suivi {
+  margin-top: 14px;
+}
+.collecte-suivi > p {
+  margin: 0 0 8px;
+}
+.collecte-barre {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--sunken);
+  overflow: hidden;
+  margin: 2px 0 10px;
+}
+.collecte-barre span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: inherit;
+  transition: width 0.6s ease;
+}
+.collecte-detail {
+  margin: 8px 0 4px;
+}
+.collecte-detail summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-weight: 600;
+}
+.collecte-detail ul {
+  margin: 8px 0;
+  padding: 0 0 0 1.1em;
+  display: grid;
+  gap: 5px;
+}
+.collecte-detail p {
+  margin: 10px 0 0;
+}
+.collecte-peu {
+  margin: 12px 0 0;
+}
+.collecte-form {
+  display: grid;
+  gap: 18px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.collecte-ligne {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+.collecte-raccourcis {
+  display: flex;
+  gap: 12px;
+}
+.collecte-metiers {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr));
+}
+.collecte-reglages {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 16px;
+  align-items: end;
+}
+.collecte-reglages > .q-field {
+  grid-column: auto;
+}
+.collecte-segments {
+  display: inline-flex;
+  border: 1.5px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--sheet);
+  width: max-content;
+}
+.collecte-segments label {
+  position: relative;
+  min-width: 58px;
+  min-height: 44px;
+  display: grid;
+  place-items: center;
+  font-weight: 650;
+  cursor: pointer;
+  border-left: 1.5px solid var(--line-strong);
+}
+.collecte-segments label:first-child {
+  border-left: 0;
+}
+.collecte-segments label.on {
+  background: var(--ink);
+  color: #fff;
+}
+.collecte-segments input {
+  position: absolute;
+  opacity: 0;
+  inset: 0;
+  margin: 0;
+  cursor: pointer;
+}
+.collecte-segments label:has(input:focus-visible) {
+  outline: 3px solid var(--accent);
+  outline-offset: -3px;
+}
+.collecte-estimation {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+}
+.collecte-form > .muted.small {
+  margin: -10px 0 0;
+}
+
+/* Onglets Sites / Fonctionnalités, catalogue */
+.insp-vues {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.insp-vues button {
+  font: inherit;
+  font-weight: 650;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--sheet);
+  color: var(--muted);
+  cursor: pointer;
+}
+.insp-vues button.on {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fff;
+}
+.insp-catalogue {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 22px;
+  align-items: start;
+}
+.insp-catalogue > section {
+  background: var(--sheet);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+}
+.ss .insp-catalogue h2 {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 1.25rem;
+  margin: 0 0 4px;
+}
+.insp-catalogue section > p {
+  margin: 0 0 14px;
+}
+.insp-compteurs,
+.insp-trouvailles {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 2px;
+}
+.insp-compteurs button,
+.insp-trouvailles button {
+  all: unset;
+  box-sizing: border-box;
+  width: 100%;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+}
+.insp-compteurs button {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(60px, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+}
+.insp-compteurs button:hover,
+.insp-trouvailles button:hover {
+  background: var(--sunken);
+}
+.insp-compteurs button:focus-visible,
+.insp-trouvailles button:focus-visible {
+  outline: 3px solid var(--accent);
+}
+.insp-compteur-nom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  font-size: 0.93rem;
+}
+.insp-compteur-barre {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--sunken);
+  overflow: hidden;
+}
+.insp-compteur-barre span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: inherit;
+}
+.insp-compteur-n {
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+.insp-trouvailles button {
+  display: grid;
+  gap: 2px;
+}
+.insp-trouvailles strong {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+@media (max-width: 900px) {
+  .insp-catalogue {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 @media (max-width: 900px) {
   .insp-fiche-corps {
     grid-template-columns: minmax(0, 1fr);

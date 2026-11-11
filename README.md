@@ -102,6 +102,14 @@ Les pistes s'ajoutent aux consignes de la génération des 10 modèles (bloc `<i
 
 Le travail se fait par passages de moins de 5 minutes (`maxDuration` 300) : l'agent se relance lui-même par un appel signé (jeton « agent » de 10 minutes, tiré de `AGENCY_PASSWORD`), et la surveillance (`/api/cron/pilotage`, toutes les 5 minutes) reprend un dossier resté en plan. Réglages › **Agent d'inspiration** coupe le départ automatique ; le bouton du dossier marche toujours.
 
+Quand la bibliothèque compte au moins 10 sites récents et bien notés pour le métier du client, l'agent y choisit 6 sites (Claude les classe selon le brief : spécialité, ambiance, type de site, originalité, variété des styles, et les moins servis aux autres clients) et ne cherche que 2 nouveaux sites sur le web. Chaque fiche garde la liste des dossiers auxquels elle a servi (`utilisePar`).
+
+### Collecte en amont
+
+Page **Inspiration** › **Actualiser la bibliothèque** : l'agence choisit des métiers et un nombre de nouveaux sites par métier (3, 5 ou 10). Pour chaque métier, une recherche web sous un angle qui change à chaque collecte (spécialité tirée de `SPECIALITES`, zone ou source tirée de `ANGLES_COLLECTE` : France, galeries de design, Belgique/Suisse/Québec, Europe, petites adresses, monde, sites primés), puis visite et analyse de chaque site comme pour un dossier. L'analyse relève aussi la spécialité, une note d'originalité (authentique ou thème générique) et les « trouvailles » (fonctionnalités hors de la liste fermée). L'onglet **Fonctionnalités** de la page les recense.
+
+Le travail est découpé en unités (une recherche, un site) que 3 ouvriers se partagent (`src/server/collecte.js`), chacun dans sa propre fonction de 5 minutes, relancé par un appel signé (jeton « collecte »). L'état est dans `inspiration/collecte.json` (collecte en cours, historique, rang de chaque métier). Des sites de réserve compensent les sites écartés ; un métier encore en dessous de l'objectif a droit à une recherche de complément sous un autre angle. La surveillance relance une collecte sans nouvelles depuis 7 minutes et arrête une collecte de plus de 24 h.
+
 Chaque génération complète fait 3 appels à l'API Claude, plus 0 à 8 images Gemini selon le nombre de photos fournies. L'agent d'inspiration ajoute, par questionnaire, une recherche web (8 recherches au plus), une analyse par nouveau site visité (7 au plus) et une synthèse. Les coûts dépendent des modèles choisis : consultez les grilles tarifaires (platform.claude.com, ai.google.dev/pricing) et fixez une limite de dépenses dans chaque console.
 
 Google fait évoluer ses modèles d'image : si la génération renvoie « modèle introuvable », mettez à jour `GEMINI_IMAGE_MODEL` d'après la liste de ai.google.dev/gemini-api/docs/image-generation.
@@ -158,7 +166,8 @@ src/server/mail.js        E-mails par Brevo (facultatif)
 src/server/drive.js       Rangement dans Google Drive : fiche brief, photos, .zip des versions (facultatif)
 src/server/inspiration.js Agent d'inspiration : recherche, visites, analyses, pistes, bibliothèque, relances
 src/server/navigateur.js  Navigateur sans écran : gardien d'adresses, robots.txt, bannières, captures, relevé
-src/engine/inspiration.js Fonctionnalités repérées, adresses, pistes ajoutées aux consignes
+src/server/collecte.js    Collecte en amont : unités de travail, ouvriers en parallèle, réserves, compléments, relances
+src/engine/inspiration.js Fonctionnalités repérées, adresses, pistes ajoutées aux consignes, spécialités et angles de collecte
 src/engine/espace.js      Ce que le client peut modifier, contrôles, fusion, fêtes et annonces datées
 src/server/http.js        Accès agence, erreurs, nettoyage des réponses
 src/ui/                   Interface (questionnaire, galerie, aperçu)

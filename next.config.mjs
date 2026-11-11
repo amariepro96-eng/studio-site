@@ -27,6 +27,8 @@ const nextConfig = {
   // fichiers lus par playwright-core au lancement) : joints en entier à la fonction de l'agent
   outputFileTracingIncludes: {
     '/api/agence/inspiration/agent': ['./node_modules/@sparticuz/chromium/**/*', './node_modules/playwright-core/**/*'],
+    // Collecte en amont : ses ouvriers visitent les sites avec le même navigateur
+    '/api/agence/inspiration/collecte/agent': ['./node_modules/@sparticuz/chromium/**/*', './node_modules/playwright-core/**/*'],
   },
   async headers() {
     return [

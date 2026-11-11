@@ -5,7 +5,7 @@ import { api } from '../api.js';
 import { STATUTS_INSPIRATION, labelFonctionnalite, nomArchetype, dejaDansLeBrief } from '../../engine/inspiration.js';
 
 const fmt = (iso) => (iso ? new Date(iso).toLocaleString('fr-FR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) : '');
-export const SOURCES = { actuel: 'Son site actuel', client: 'Cité par le client', metier: 'Même métier' };
+export const SOURCES = { actuel: 'Son site actuel', client: 'Cité par le client', metier: 'Même métier', collecte: 'Collecte' };
 export const vignette = (s) => (s?.vignette ? `/api/agence/inspiration/captures/${s.vignette}?v=${encodeURIComponent(s.visiteLe || '')}` : '');
 
 export default function InspirationDossier({ rec }) {
@@ -84,7 +84,8 @@ export default function InspirationDossier({ rec }) {
       )}
       {insp?.statut === 'pret' && (
         <p className="muted small">
-          {insp.sites.length} site{insp.sites.length > 1 ? 's' : ''} analysé{insp.sites.length > 1 ? 's' : ''} le {fmt(insp.finLe)}. Les pistes sont ajoutées aux consignes de la génération des modèles.
+          {insp.sites.length} site{insp.sites.length > 1 ? 's' : ''} analysé{insp.sites.length > 1 ? 's' : ''} le {fmt(insp.finLe)}
+          {insp.bibliotheque === 'riche' ? ', choisis surtout dans ta bibliothèque' : ''}. Les pistes sont ajoutées aux consignes de la génération des modèles.
         </p>
       )}
       {insp?.statut === 'erreur' && (
@@ -127,6 +128,19 @@ export default function InspirationDossier({ rec }) {
                     </li>
                   );
                 })}
+              </ul>
+            </>
+          )}
+          {p.trouvailles?.length > 0 && (
+            <>
+              <h3>Trouvailles à adapter</h3>
+              <ul className="insp-idees">
+                {p.trouvailles.map((t, i) => (
+                  <li key={i}>
+                    <strong>{t.titre}</strong>
+                    {t.idee ? ` : ${t.idee}` : ''}
+                  </li>
+                ))}
               </ul>
             </>
           )}

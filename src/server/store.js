@@ -88,8 +88,19 @@ async function writeRaw(pathname, body, { contentType, ifMatch, overwrite = true
     const file = localPath(pathname);
     await fs.mkdir(path.dirname(file), { recursive: true });
     if (!overwrite) {
-      const deja = await fs.stat(file).then(() => true, () => false);
-      if (deja) throw new Error('Ce fichier existe déjà.');
+      // Création seulement si absent, de façon atomique (comme allowOverwrite: false de Vercel Blob)
+      const tmpNew = `${file}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.new`;
+      await fs.writeFile(tmpNew, body);
+      try {
+        await fs.link(tmpNew, file);
+      } catch (e) {
+        if (e.code === 'EEXIST') throw new Error('Ce fichier existe déjà.');
+        throw e;
+      } finally {
+        await fs.rm(tmpNew, { force: true });
+      }
+      await fs.writeFile(file + '.meta', JSON.stringify({ contentType }));
+      return;
     }
     if (ifMatch) {
       const cur = await readRaw(pathname);
@@ -437,6 +448,17 @@ export async function getInspirationAttente() {
 }
 export function updateInspirationAttente(fn) {
   return upsertJson('inspiration/attente.json', INSPIRATION_ATTENTE_VIDE, (s) => fn({ ...INSPIRATION_ATTENTE_VIDE, ...s }));
+}
+// Collecte en amont (inspiration/collecte.json) : la collecte en cours, l'historique, et pour chaque
+// métier le nombre de collectes déjà faites (chaque nouvelle cherche sous un autre angle)
+export const COLLECTE_VIDE = { run: null, historique: [], rangs: {} };
+export async function getCollecte() {
+  if (storageMode() === 'none') return { ...COLLECTE_VIDE };
+  const cur = await readJson('inspiration/collecte.json').catch(() => null);
+  return { ...COLLECTE_VIDE, ...(cur?.data || {}) };
+}
+export function updateCollecte(fn) {
+  return upsertJson('inspiration/collecte.json', COLLECTE_VIDE, (s) => fn({ ...COLLECTE_VIDE, ...s }));
 }
 export async function getFicheSite(siteId) {
   if (!siteIdValide(siteId)) return null;

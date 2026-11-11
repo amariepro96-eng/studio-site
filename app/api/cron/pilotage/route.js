@@ -1,6 +1,7 @@
 import { safeEqual, origine } from '../../../../src/server/http.js';
 import { verificationAutomatique } from '../../../../src/server/alertes.js';
 import { reprendreInspirations } from '../../../../src/server/inspiration.js';
+import { reprendreCollecte } from '../../../../src/server/collecte.js';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -23,6 +24,12 @@ export async function GET(req) {
     await reprendreInspirations(origine(req));
   } catch (e) {
     console.error('[inspiration] reprise', e?.name, String(e?.message || '').slice(0, 200));
+  }
+  // Collecte en amont restée en plan (ouvriers coupés, Claude surchargé) : relancée
+  try {
+    await reprendreCollecte(origine(req));
+  } catch (e) {
+    console.error('[collecte] reprise', e?.name, String(e?.message || '').slice(0, 200));
   }
   return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } });
 }

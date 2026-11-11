@@ -18,6 +18,7 @@ import { signer } from './securite.js';
 import { ouvrirNavigateur, visiterSite, VisiteError } from './navigateur.js';
 import {
   FONCTIONNALITES, IDS_FONCTIONNALITES, ARCHETYPE_IDS, normaliserUrl, domaineDe, adressesDansTexte, estUnSiteEntreprise, enCoursInspiration,
+  ANGLES_COLLECTE, angleCollecte,
 } from '../engine/inspiration.js';
 import { SECTORS, sectorLabel } from '../engine/questions.js';
 import { ARCHETYPES, MOODS } from '../engine/archetypes.js';
@@ -26,6 +27,10 @@ import { parseJsonLoose } from '../engine/util.js';
 export const MAX_SITES_CLIENT = 4; // sites cités par le client
 export const MAX_SITES_RECHERCHE = 5; // nouveaux sites du métier trouvés à chaque dossier
 export const MAX_SITES_REUTILISES = 4; // fiches déjà dans la bibliothèque, pour le même métier
+// Bibliothèque bien fournie pour le métier (collecte en amont) : on y pioche davantage, on cherche moins
+export const SEUIL_BIBLIOTHEQUE_RICHE = 10;
+export const MAX_SITES_BIBLIOTHEQUE = 6;
+export const MAX_SITES_RECHERCHE_RICHE = 2;
 const FRAICHEUR_JOURS = 365; // au-delà, un site est revisité
 const BAIL_MS = 6 * 60_000; // un passage de l'agent bloque les autres pendant 6 minutes au plus
 // Un passage tient dans les 5 minutes d'une fonction Vercel : visite ≤ 75 s, analyse ≤ 75 s
@@ -155,8 +160,9 @@ Réponds uniquement avec ce JSON :
 
 async function appelRecherche(client, b, opts) {
   const cfg = config();
-  const tools = opts.webOk ? [{ type: 'web_search_20250305', name: 'web_search', max_uses: 8, user_location: { type: 'approximate', country: 'FR', timezone: 'Europe/Paris' } }] : undefined;
-  const messages = [{ role: 'user', content: consigneRecherche(b, opts) }];
+  const lieu = opts.france === false ? {} : { user_location: { type: 'approximate', country: 'FR', timezone: 'Europe/Paris' } };
+  const tools = opts.webOk ? [{ type: 'web_search_20250305', name: 'web_search', max_uses: opts.maxRecherches || 8, ...lieu }] : undefined;
+  const messages = [{ role: 'user', content: opts.consigne ? opts.consigne(opts) : consigneRecherche(b, opts) }];
   let msg;
   for (let tour = 0; tour < 4; tour++) {
     msg = await client.messages.create({ model: cfg.model, max_tokens: 4000, messages, ...(tools ? { tools } : {}) }, { timeout: 120_000, maxRetries: 1 });
@@ -203,24 +209,82 @@ export async function rechercherSites(b, { combien = MAX_SITES_RECHERCHE, connus
   return { sites, recherche, note };
 }
 
+// ---------- 1 bis. Collecte en amont : sites remarquables d'un métier, sans client ----------
+function consigneCollecte({ metier, specialite, angle, combien, connus, webOk }) {
+  const a = angleCollecte(angle) || ANGLES_COLLECTE[0];
+  const label = SECTORS.find((s) => s.id === metier)?.label || metier;
+  return `Tu aides une agence web française à constituer une bibliothèque d'inspiration : des sites internet remarquables, authentiques et uniques, classés par métier. Elle s'en sert pour créer des sites originaux à ses clients (jamais pour copier).
+
+Métier : ${label}${specialite ? `\nSpécialité visée cette fois : ${specialite}` : ''}
+Où chercher cette fois : ${a.consigne}
+
+Trouve ${combien} sites internet d'entreprises indépendantes de ce métier${specialite ? ' (de préférence de cette spécialité)' : ''} :
+- authentiques : une vraie identité (vraies photos, ton personnel, mise en page pensée pour l'entreprise), pas un thème générique ;
+- beaux, actuels, agréables sur téléphone ;
+- avec des fonctionnalités ou des idées de présentation intéressantes (réservation, configurateur, carte interactive, avant/après, horaires en direct, etc.) ;
+- variés entre eux : styles, ambiances, tailles d'entreprise.
+- Évite les chaînes et franchises, les annuaires, places de marché, réseaux sociaux, pages de plateformes (Planity, TheFork, Doctolib…), les sites de démonstration de thèmes${metier === 'tech' || metier === 'photo' || metier === 'conseil' ? '' : ' et les sites d’agences web'}.
+- Donne l'adresse de la page d'accueil du site de l'entreprise elle-même, telle qu'elle existe aujourd'hui.${connus.length ? `\n- Ces sites sont déjà dans la bibliothèque, ne les redonne pas : ${connus.slice(0, 120).join(', ')}.` : ''}${
+    webOk ? '\n- Vérifie avec la recherche web que chaque site existe et est en ligne.' : '\n- Tu n’as pas accès à internet : ne propose que des sites dont tu es sûr de l’adresse.'
+  }
+
+Réponds uniquement avec ce JSON :
+{"sites":[{"url":"https://…","nom":"…","pays":"…","pourquoi":"une phrase : ce qu'il a d'inspirant"}]}`;
+}
+
+export async function rechercherPourCollecte({ metier, specialite = '', angle = 'france', combien = 5, connus = [] }) {
+  const client = claude();
+  const france = Boolean(angleCollecte(angle)?.france);
+  const opts = { metier, specialite, angle, combien, connus, france, maxRecherches: 6, consigne: consigneCollecte };
+  let data;
+  let recherche = 'web';
+  try {
+    data = await appelRecherche(client, {}, { ...opts, webOk: true });
+  } catch (e) {
+    if (illisible(e)) throw new InspirationError('La réponse de l’IA était illisible (recherche).', 'invalid_json');
+    if (!(e?.status === 400 && /web.?search/i.test(String(e?.message || '')))) throw erreurClaude(e, 'chercher les sites');
+    recherche = 'memoire';
+    try {
+      data = await appelRecherche(client, {}, { ...opts, webOk: false });
+    } catch (e2) {
+      if (illisible(e2)) throw new InspirationError('La réponse de l’IA était illisible (recherche).', 'invalid_json');
+      throw erreurClaude(e2, 'chercher les sites');
+    }
+  }
+  const vus = new Set(connus.map((c) => c.replace(/^www\./, '')));
+  const sites = [];
+  for (const x of Array.isArray(data?.sites) ? data.sites : []) {
+    const url = normaliserUrl(x?.url);
+    if (!url || !estUnSiteEntreprise(url)) continue;
+    const d = domaineDe(url);
+    if (vus.has(d)) continue;
+    vus.add(d);
+    sites.push({ url, nom: S(x.nom, 80) || d, pays: S(x.pays, 40), pourquoi: S(x.pourquoi, 200) });
+  }
+  return { sites, recherche };
+}
+
 // ---------- 2. Analyser un site visité ----------
 const SCHEMA_ANALYSE = {
   type: 'object',
   additionalProperties: false,
-  required: ['nom', 'metier', 'resume', 'ambiance', 'palette', 'typographies', 'miseEnPage', 'fonctionnalites', 'idees', 'pointsFaibles', 'styleProche', 'note', 'identite'],
+  required: ['nom', 'metier', 'specialite', 'resume', 'ambiance', 'palette', 'typographies', 'miseEnPage', 'fonctionnalites', 'trouvailles', 'idees', 'pointsFaibles', 'styleProche', 'note', 'originalite', 'identite'],
   properties: {
     nom: { type: 'string' },
     metier: { type: 'string', enum: SECTORS.map((s) => s.id) },
+    specialite: { type: 'string' },
     resume: { type: 'string' },
     ambiance: { type: 'array', items: { type: 'string' } },
     palette: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['hex', 'usage'], properties: { hex: { type: 'string' }, usage: { type: 'string' } } } },
     typographies: { type: 'object', additionalProperties: false, required: ['titres', 'texte'], properties: { titres: { type: 'string' }, texte: { type: 'string' } } },
     miseEnPage: { type: 'array', items: { type: 'string' } },
     fonctionnalites: { type: 'array', items: { type: 'string', enum: IDS_FONCTIONNALITES } },
+    trouvailles: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['titre', 'description'], properties: { titre: { type: 'string' }, description: { type: 'string' } } } },
     idees: { type: 'array', items: { type: 'string' } },
     pointsFaibles: { type: 'array', items: { type: 'string' } },
     styleProche: { type: 'string', enum: ARCHETYPE_IDS },
     note: { type: 'integer' },
+    originalite: { type: 'integer' },
     identite: { type: 'string' },
   },
 };
@@ -230,16 +294,19 @@ const SYSTEM_ANALYSE = `Tu es directeur artistique dans une agence web français
 Réponds uniquement en JSON :
 - nom : le nom de l'entreprise tel qu'il apparaît.
 - metier : l'identifiant du métier de l'entreprise, parmi : ${SECTORS.map((s) => `${s.id} (${s.label})`).join(', ')}.
+- specialite : sa spécialité précise en 2 à 5 mots (ex. « pizzeria napolitaine », « plombier chauffagiste », « photographe de mariage »).
 - resume : 2 phrases : ce que fait ce site de bien (ou de mal), concrètement.
 - ambiance : 3 à 5 mots ou courtes expressions (ex. « minimaliste », « chaleureux », « photo plein écran »).
 - palette : 3 à 6 couleurs dominantes en hexadécimal, chacune avec son usage (fond, texte, accent, boutons…).
 - typographies : style des titres et du texte, en mots simples (ex. « serif fine et élégante », « sans-serif géométrique grasse »), sans deviner de nom de police.
 - miseEnPage : 3 à 6 observations sur la mise en page (haut de page, enchaînement des sections, menu, mobile).
 - fonctionnalites : celles réellement présentes, parmi : ${FONCTIONNALITES.map((f) => `${f.id} (${f.label})`).join(', ')}.
+- trouvailles : 0 à 4 fonctionnalités ou façons de présenter qui sortent de l'ordinaire et pourraient servir à d'autres entreprises (ex. « Configurateur de bouquet en 3 étapes », « Carte des chantiers réalisés », « Horaires qui indiquent "ouvert maintenant" »). Pour chacune : un titre court et une phrase qui décrit comment c'est fait. Rien de banal (pas « formulaire de contact », pas « galerie photo » sans originalité).
 - idees : 3 à 6 idées concrètes qu'une agence pourrait réutiliser pour un autre client de ce métier, formulées comme des idées (ex. « Afficher les horaires du jour dès le haut de page »).
 - pointsFaibles : 0 à 3 défauts à ne pas reproduire.
 - styleProche : la direction artistique de Studio Site la plus proche, parmi : ${ARCHETYPES.map((a) => `${a.id} (${a.name})`).join(', ')}.
 - note : de 1 à 5, l'intérêt de ce site comme source d'inspiration (5 = remarquable).
+- originalite : de 1 à 5, à quel point le site est authentique et unique : 5 = identité visuelle propre, mise en page pensée pour cette entreprise, vraies photos, ton personnel ; 1 = thème générique, photos de banque d'images, texte passe-partout.
 - identite : pour le site actuel du client seulement, ce qu'il faut garder de son identité (couleurs, logo, ton) en une ou deux phrases ; sinon chaîne vide.`;
 
 const NOMS_CAPTURES = { ecran: 'Haut de la page d’accueil sur ordinateur', accueil: 'Page d’accueil entière sur ordinateur', mobile: 'Page d’accueil sur téléphone', 'page-1': 'Une page intérieure', 'page-2': 'Une autre page intérieure' };
@@ -251,6 +318,7 @@ export async function analyserVisite(visite, { brief, source }) {
     source === 'actuel' ? 'Ce site est le SITE ACTUEL du client que nous allons refaire : relève son identité à garder (couleurs, logo, ton) dans « identite ».' : '',
     source === 'client' ? 'Ce site a été cité par le client comme un site qu’il aime.' : '',
     source === 'metier' ? `Ce site a été trouvé comme source d'inspiration pour un client du métier : ${sectorLabel(brief) || 'non précisé'}.` : '',
+    source === 'collecte' ? `Ce site a été trouvé pour la bibliothèque d'inspiration de l'agence, métier : ${sectorLabel(brief) || 'non précisé'}${brief?.specialite ? ` (spécialité cherchée : ${S(brief.specialite, 60)})` : ''}.` : '',
     `Adresse : ${visite.url}`,
     r.titre ? `Titre : ${S(r.titre, 160)}` : '',
     r.description ? `Description : ${S(r.description, 300)}` : '',
@@ -278,16 +346,19 @@ export async function analyserVisite(visite, { brief, source }) {
   return {
     nom: S(data?.nom, 80),
     metier: SECTORS.some((s) => s.id === data?.metier) ? data.metier : '',
+    specialite: S(data?.specialite, 60),
     resume: S(data?.resume, 400),
     ambiance: liste(data?.ambiance, 5, 40),
     palette: (Array.isArray(data?.palette) ? data.palette : []).map((p) => ({ hex: hex(p?.hex), usage: S(p?.usage, 40) })).filter((p) => p.hex).slice(0, 6),
     typographies: { titres: S(data?.typographies?.titres, 120), texte: S(data?.typographies?.texte, 120) },
     miseEnPage: liste(data?.miseEnPage, 6, 200),
     fonctionnalites: [...new Set((Array.isArray(data?.fonctionnalites) ? data.fonctionnalites : []).filter((f) => IDS_FONCTIONNALITES.includes(f)))],
+    trouvailles: (Array.isArray(data?.trouvailles) ? data.trouvailles : []).map((t) => ({ titre: S(t?.titre, 70), description: S(t?.description, 240) })).filter((t) => t.titre).slice(0, 4),
     idees: liste(data?.idees, 6, 220),
     pointsFaibles: liste(data?.pointsFaibles, 3, 200),
     styleProche: ARCHETYPE_IDS.includes(data?.styleProche) ? data.styleProche : '',
     note: Math.max(1, Math.min(5, Math.round(Number(data?.note) || 3))),
+    originalite: Math.max(1, Math.min(5, Math.round(Number(data?.originalite) || 3))),
     identite: source === 'actuel' ? S(data?.identite, 300) : '',
   };
 }
@@ -296,11 +367,12 @@ export async function analyserVisite(visite, { brief, source }) {
 const SCHEMA_PISTES = {
   type: 'object',
   additionalProperties: false,
-  required: ['resume', 'stylesConseilles', 'fonctionnalites', 'idees', 'ton', 'aEviter', 'siteActuel'],
+  required: ['resume', 'stylesConseilles', 'fonctionnalites', 'trouvailles', 'idees', 'ton', 'aEviter', 'siteActuel'],
   properties: {
     resume: { type: 'string' },
     stylesConseilles: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['archetype', 'pourquoi'], properties: { archetype: { type: 'string', enum: ARCHETYPE_IDS }, pourquoi: { type: 'string' } } } },
     fonctionnalites: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['id', 'pourquoi'], properties: { id: { type: 'string', enum: IDS_FONCTIONNALITES }, pourquoi: { type: 'string' } } } },
+    trouvailles: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['titre', 'idee'], properties: { titre: { type: 'string' }, idee: { type: 'string' } } } },
     idees: { type: 'array', items: { type: 'string' } },
     ton: { type: 'string' },
     aEviter: { type: 'array', items: { type: 'string' } },
@@ -314,11 +386,12 @@ export async function synthetiser(brief, fiches) {
     .map((f, i) => {
       const a = f.analyse || {};
       return [
-        `Site ${i + 1} — ${a.nom || f.domaine} (${f.source === 'actuel' ? 'SITE ACTUEL DU CLIENT' : f.source === 'client' ? 'cité par le client' : 'même métier'}, note ${a.note || '?'}/5)`,
+        `Site ${i + 1} — ${a.nom || f.domaine}${a.specialite ? `, ${a.specialite}` : ''} (${f.source === 'actuel' ? 'SITE ACTUEL DU CLIENT' : f.source === 'client' ? 'cité par le client' : 'même métier'}, note ${a.note || '?'}/5${a.originalite ? `, originalité ${a.originalite}/5` : ''})`,
         a.resume ? `Résumé : ${a.resume}` : '',
         a.ambiance?.length ? `Ambiance : ${a.ambiance.join(', ')}` : '',
         a.styleProche ? `Style proche : ${a.styleProche}` : '',
         a.fonctionnalites?.length ? `Fonctionnalités : ${a.fonctionnalites.join(', ')}` : '',
+        a.trouvailles?.length ? `Trouvailles : ${a.trouvailles.map((t) => `${t.titre} (${t.description})`).join(' ; ')}` : '',
         a.miseEnPage?.length ? `Mise en page : ${a.miseEnPage.join(' ; ')}` : '',
         a.idees?.length ? `Idées : ${a.idees.join(' ; ')}` : '',
         a.pointsFaibles?.length ? `Défauts : ${a.pointsFaibles.join(' ; ')}` : '',
@@ -344,6 +417,7 @@ Réponds uniquement en JSON :
 - resume : 2 ou 3 phrases pour l'agence : ce qui ressort de ces sites pour ce client.
 - stylesConseilles : 3 à 5 directions artistiques de Studio Site, de la plus adaptée à la moins adaptée, chacune avec une raison courte. Directions : ${ARCHETYPES.map((a) => `${a.id} (${a.name})`).join(', ')}.
 - fonctionnalites : 3 à 8 fonctionnalités utiles à ce client, chacune avec une raison courte, parmi : ${IDS_FONCTIONNALITES.join(', ')}.
+- trouvailles : 0 à 4 fonctionnalités ou façons de présenter originales vues sur ces sites qui serviraient vraiment CE client, chacune avec un titre court et une phrase qui dit comment l'adapter à son site. Uniquement ce qui est compatible avec son brief.
 - idees : 6 à 10 idées de sections, de contenus ou d'angles pour SON site, concrètes et adaptées à ce qu'il a écrit (ex. « Une section "La journée au fournil" avec 3 étapes en photos »). Aucune idée ne doit supposer un fait absent du brief (prix, label, année, livraison…).
 - ton : le ton et le vocabulaire qui marchent dans ce métier, en une phrase.
 - aEviter : 2 à 5 erreurs vues sur ces sites à ne pas reproduire.
@@ -361,6 +435,7 @@ Réponds uniquement en JSON :
     resume: S(data?.resume, 600),
     stylesConseilles: styles.slice(0, 5),
     fonctionnalites: fonctions.slice(0, 8),
+    trouvailles: (Array.isArray(data?.trouvailles) ? data.trouvailles : []).map((t) => ({ titre: S(t?.titre, 70), idee: S(t?.idee, 220) })).filter((t) => t.titre).slice(0, 4),
     idees: liste(data?.idees, 10, 220),
     ton: S(data?.ton, 300),
     aEviter: liste(data?.aEviter, 5, 200),
@@ -370,7 +445,7 @@ Réponds uniquement en JSON :
 
 // ---------- Bibliothèque ----------
 // Résumé d'une fiche pour l'index (page Inspiration, réutilisation par métier)
-export function entreeIndex(fiche, metiers = []) {
+export function entreeIndex(fiche, metiers = [], avant = null) {
   const a = fiche.analyse || {};
   return {
     id: fiche.id,
@@ -378,13 +453,19 @@ export function entreeIndex(fiche, metiers = []) {
     domaine: fiche.domaine,
     nom: a.nom || fiche.nom || fiche.domaine,
     metiers: [...new Set([...(metiers || []), a.metier].filter(Boolean))].slice(0, 6),
+    specialite: a.specialite || fiche.specialite || '',
     source: fiche.source,
     visiteLe: fiche.visiteLe,
     note: a.note || 0,
+    originalite: a.originalite || 0,
     ambiance: (a.ambiance || []).slice(0, 4),
     styleProche: a.styleProche || '',
     fonctionnalites: a.fonctionnalites || [],
+    trouvailles: (a.trouvailles || []).map((t) => t.titre).filter(Boolean).slice(0, 4),
     vignette: (fiche.captures || []).find((c) => c.nom === 'ecran')?.id || fiche.captures?.[0]?.id || '',
+    // Dossiers clients pour lesquels ce site a servi : on évite de donner les mêmes à tout le monde
+    utilisePar: (avant?.utilisePar || []).slice(-20),
+    ...(fiche.collecte ? { collecte: fiche.collecte } : avant?.collecte ? { collecte: avant.collecte } : {}),
   };
 }
 
@@ -393,12 +474,27 @@ const frais = (iso) => iso && Date.now() - Date.parse(iso) < FRAICHEUR_JOURS * 8
 async function noterDansIndex(fiche, metier) {
   await updateInspirationIndex((idx) => {
     const avant = idx.sites[fiche.id];
-    idx.sites[fiche.id] = entreeIndex(fiche, [...(avant?.metiers || []), metier]);
+    idx.sites[fiche.id] = entreeIndex(fiche, [...(avant?.metiers || []), metier], avant);
     return idx;
   });
 }
 
-async function ajouterMetier(siteId, metier) {
+// Les sites qui ont servi aux pistes d'un dossier (une seule fois par dossier, même s'il est relancé)
+async function noterUsage(siteIds, dossierId) {
+  if (!siteIds.length || !dossierId) return;
+  await updateInspirationIndex((idx) => {
+    let change = false;
+    for (const s of siteIds) {
+      const e = idx.sites[s];
+      if (!e || e.source === 'actuel' || (e.utilisePar || []).includes(dossierId)) continue;
+      e.utilisePar = [...(e.utilisePar || []), dossierId].slice(-20);
+      change = true;
+    }
+    return change ? idx : null;
+  }).catch((e) => console.warn('[inspiration] usage', e?.message));
+}
+
+export async function ajouterMetier(siteId, metier) {
   if (!metier || metier === 'autre') return;
   await updateInspirationIndex((idx) => {
     const e = idx.sites[siteId];
@@ -406,6 +502,99 @@ async function ajouterMetier(siteId, metier) {
     e.metiers = [...(e.metiers || []), metier].slice(0, 6);
     return idx;
   });
+}
+
+// ---------- Choisir dans la bibliothèque les sites qui inspireront le mieux ce client ----------
+// Score simple (sert aussi quand l'IA ne répond pas) : intérêt, originalité, ambiance voulue,
+// type de site, et une pénalité pour les sites déjà servis à beaucoup de clients (ou à celui-ci).
+export function classerBibliotheque(b, entrees, dossierId = '') {
+  const moods = b.moods || [];
+  const score = (e) => {
+    const arch = ARCHETYPES.find((a) => a.id === e.styleProche);
+    const accord = moods.reduce((t, m) => t + (arch?.moods?.[m] || 0), 0);
+    const usage = (e.utilisePar || []).filter((x) => x !== dossierId).length;
+    return (
+      (e.note || 3) +
+      (e.originalite || 3) +
+      Math.min(2, accord / 2) +
+      (b.siteType === 'boutique' && (e.fonctionnalites || []).includes('boutique') ? 1 : 0) +
+      Math.min(1, (e.trouvailles || []).length / 3) -
+      0.4 * Math.min(5, usage) -
+      ((e.utilisePar || []).includes(dossierId) ? 4 : 0)
+    );
+  };
+  const tries = entrees.map((e) => ({ e, s: score(e) })).sort((x, y) => y.s - x.s || String(y.e.visiteLe).localeCompare(String(x.e.visiteLe)));
+  // Variété : pas plus de 2 sites du même style tant qu'il en reste d'autres
+  const out = [];
+  const parStyle = {};
+  for (const { e } of tries) {
+    if ((parStyle[e.styleProche] || 0) >= 2) continue;
+    parStyle[e.styleProche] = (parStyle[e.styleProche] || 0) + 1;
+    out.push(e);
+  }
+  for (const { e } of tries) if (!out.includes(e)) out.push(e);
+  return out;
+}
+
+const SCHEMA_CHOIX = (ids) => ({
+  type: 'object',
+  additionalProperties: false,
+  required: ['choix'],
+  properties: { choix: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['id', 'pourquoi'], properties: { id: { type: 'string', enum: ids }, pourquoi: { type: 'string' } } } } },
+});
+
+export async function choisirDansBibliotheque(b, entrees, { combien = MAX_SITES_BIBLIOTHEQUE, dossierId = '' } = {}) {
+  const pool = classerBibliotheque(b, entrees, dossierId).slice(0, 60);
+  if (pool.length <= combien) return pool;
+  const lignes = pool
+    .map((e) => {
+      const usage = (e.utilisePar || []).filter((x) => x !== dossierId).length;
+      return [
+        `[${e.id}] ${S(e.nom, 60)}${e.specialite ? ` — ${S(e.specialite, 50)}` : ''}`,
+        e.ambiance?.length ? `ambiance : ${e.ambiance.join(', ')}` : '',
+        e.styleProche ? `style : ${e.styleProche}` : '',
+        e.fonctionnalites?.length ? `fonctionnalités : ${e.fonctionnalites.slice(0, 10).join(', ')}` : '',
+        e.trouvailles?.length ? `trouvailles : ${e.trouvailles.join(' ; ')}` : '',
+        `note ${e.note || '?'}/5, originalité ${e.originalite || '?'}/5`,
+        usage ? `déjà servi à ${usage} client${usage > 1 ? 's' : ''}` : 'jamais servi',
+        (e.utilisePar || []).includes(dossierId) ? 'DÉJÀ MONTRÉ À CE CLIENT' : '',
+      ]
+        .filter(Boolean)
+        .join(' · ');
+    })
+    .join('\n');
+  const deja = [...new Set([...(b.features || []), ...(b.pages || [])])].join(', ') || 'aucune';
+  const prompt = `Tu choisis, dans la bibliothèque d'inspiration d'une agence web, les sites qui inspireront le mieux le site de CE client.
+
+<client>
+${resumeBrief(b)}
+Pages et fonctionnalités demandées : ${deja}
+</client>
+
+<bibliotheque>
+${lignes}
+</bibliotheque>
+
+Choisis ${combien} sites :
+- les plus proches de son activité et de sa spécialité, de l'ambiance qu'il souhaite et de son type de site ;
+- authentiques et originaux (originalité élevée), avec des idées qu'il pourrait reprendre à sa façon ;
+- variés entre eux : pas plus de 2 avec le même style, des ambiances différentes ;
+- à intérêt égal, ceux qui ont servi au moins de clients, pour que chaque client ait des propositions uniques ; évite ceux déjà montrés à ce client.
+
+Réponds uniquement avec ce JSON : {"choix":[{"id":"…","pourquoi":"une phrase : ce qu'il apporte à ce client"}]}`;
+  const data = await demanderJson(claude(), { max_tokens: 1500, messages: [{ role: 'user', content: prompt }] }, SCHEMA_CHOIX(pool.map((e) => e.id)), 'choisir dans la bibliothèque');
+  const out = [];
+  for (const x of Array.isArray(data?.choix) ? data.choix : []) {
+    const e = pool.find((p) => p.id === x?.id);
+    if (e && !out.some((o) => o.id === e.id)) out.push({ ...e, pourquoi: S(x.pourquoi, 200) });
+    if (out.length >= combien) break;
+  }
+  // Réponse trop courte : on complète avec le classement
+  for (const e of pool) {
+    if (out.length >= combien) break;
+    if (!out.some((o) => o.id === e.id)) out.push(e);
+  }
+  return out;
 }
 
 // ---------- Déroulé d'un dossier ----------
@@ -452,29 +641,42 @@ async function preparerCandidats(rec) {
   // Les adresses qu'il a écrites lui-même
   for (const url of adressesDansTexte(b.inspirations).slice(0, MAX_SITES_CLIENT)) if (estUnSiteEntreprise(url)) ajoute({ url, nom: domaineDe(url), source: 'client', pourquoi: 'Cité par le client' });
 
-  // Fiches récentes de la bibliothèque, pour le même métier
+  // Fiches récentes de la bibliothèque, pour le même métier (remplie à chaque client et par la collecte)
   const idx = await getInspirationIndex();
-  const memeMetier = Object.values(idx.sites)
-    .filter((e) => b.sector && b.sector !== 'autre' && e.metiers?.includes(b.sector) && e.source !== 'actuel' && frais(e.visiteLe) && (e.note || 0) >= 3)
-    .sort((x, y) => (y.note || 0) - (x.note || 0) || String(y.visiteLe).localeCompare(String(x.visiteLe)))
-    .slice(0, MAX_SITES_REUTILISES);
-  for (const e of memeMetier) ajoute({ url: e.url, nom: e.nom, source: 'metier', pourquoi: 'Déjà dans la bibliothèque', reutilise: true });
+  const pris = new Set(candidats.map((c) => domaineDe(c.url)));
+  const memeMetier = Object.values(idx.sites).filter(
+    (e) => b.sector && b.sector !== 'autre' && e.metiers?.includes(b.sector) && e.source !== 'actuel' && frais(e.visiteLe) && (e.note || 0) >= 3 && !pris.has(e.domaine)
+  );
+  const riche = memeMetier.length >= SEUIL_BIBLIOTHEQUE_RICHE;
+  let choisis;
+  if (riche) {
+    try {
+      choisis = await choisirDansBibliotheque(b, memeMetier, { combien: MAX_SITES_BIBLIOTHEQUE, dossierId: rec.id });
+    } catch (e) {
+      console.warn('[inspiration] choix dans la bibliothèque', e?.code || '-', String(e?.message || '').slice(0, 160));
+      choisis = classerBibliotheque(b, memeMetier, rec.id).slice(0, MAX_SITES_BIBLIOTHEQUE);
+    }
+  } else choisis = classerBibliotheque(b, memeMetier, rec.id).slice(0, MAX_SITES_REUTILISES);
+  for (const e of choisis) ajoute({ url: e.url, nom: e.nom, source: 'metier', pourquoi: e.pourquoi || 'Déjà dans la bibliothèque', reutilise: true });
 
   // Recherche : marques citées sans adresse + nouveaux sites du métier
-  const connus = [...candidats.map((c) => domaineDe(c.url)), ...Object.values(idx.sites).map((e) => e.domaine)];
-  const { sites, recherche, note } = await rechercherSites(b, { combien: MAX_SITES_RECHERCHE, connus });
+  // Sites déjà connus (ceux du même métier d'abord : la consigne n'en cite qu'une partie)
+  const tous = Object.values(idx.sites);
+  const connus = [...new Set([...candidats.map((c) => domaineDe(c.url)), ...tous.filter((e) => e.metiers?.includes(b.sector)).map((e) => e.domaine), ...tous.map((e) => e.domaine)])];
+  const combien = riche ? MAX_SITES_RECHERCHE_RICHE : MAX_SITES_RECHERCHE;
+  const { sites, recherche, note } = await rechercherSites(b, { combien, connus });
   let nbClient = candidats.filter((c) => c.source === 'client').length;
   let nbMetier = 0;
   for (const s of sites) {
     if (s.source === 'client' && nbClient < MAX_SITES_CLIENT) {
       ajoute(s);
       nbClient++;
-    } else if (s.source === 'metier' && nbMetier < MAX_SITES_RECHERCHE) {
+    } else if (s.source === 'metier' && nbMetier < combien) {
       ajoute(s);
       nbMetier++;
     }
   }
-  return { candidats, recherche, note };
+  return { candidats, recherche, note, bibliotheque: riche ? 'riche' : '' };
 }
 
 function avecDelai(promesse, ms, message) {
@@ -483,8 +685,9 @@ function avecDelai(promesse, ms, message) {
   return Promise.race([promesse, new Promise((_, rej) => (t = setTimeout(() => rej(new VisiteError(message, 'lent')), ms)))]).finally(() => clearTimeout(t));
 }
 
-// Visite (un navigateur neuf par site, fermé juste après), analyse et rangement dans la bibliothèque
-async function traiterSite(c, rec) {
+// Visite (un navigateur neuf par site, fermé juste après), analyse et rangement dans la bibliothèque.
+// brief : celui du client (ou { sector, specialite } pour la collecte) ; metier : rangé dans l'index.
+export async function traiterSite(c, { brief = {}, metier = '', collecte = '' } = {}) {
   let visite;
   let navigateur;
   try {
@@ -499,7 +702,7 @@ async function traiterSite(c, rec) {
   } finally {
     await navigateur.close().catch(() => {});
   }
-  const analyse = await analyserVisite(visite, { brief: rec.brief || {}, source: c.source });
+  const analyse = await analyserVisite(visite, { brief, source: c.source });
   const siteId = c.siteId;
   const captures = [];
   for (const cap of visite.captures) {
@@ -515,6 +718,8 @@ async function traiterSite(c, rec) {
     nom: analyse.nom || c.nom,
     source: c.source,
     pourquoi: c.pourquoi || '',
+    ...(c.specialite ? { specialite: S(c.specialite, 60) } : {}),
+    ...(collecte ? { collecte } : {}),
     visiteLe: maintenant(),
     pages: visite.pages,
     releve: { ...visite.releve },
@@ -522,7 +727,7 @@ async function traiterSite(c, rec) {
     captures,
   };
   await saveFicheSite(siteId, fiche);
-  await noterDansIndex(fiche, rec.brief?.sector && rec.brief.sector !== 'autre' ? rec.brief.sector : '');
+  await noterDansIndex(fiche, metier && metier !== 'autre' ? metier : '');
   return fiche;
 }
 
@@ -543,8 +748,8 @@ export async function avancerInspiration(id, { budgetSiteMs = DEBUT_SITE_MAX_MS,
 
     if (insp.statut === 'attente' || insp.statut === 'recherche' || !Array.isArray(insp.candidats)) {
       await majDossier(id, { statut: 'recherche' });
-      const { candidats, recherche, note } = await preparerCandidats(rec);
-      const r2 = await majDossier(id, { statut: 'visite', candidats, recherche, note: note || '', faits: [], sites: [], ecartes: [] });
+      const { candidats, recherche, note, bibliotheque } = await preparerCandidats(rec);
+      const r2 = await majDossier(id, { statut: 'visite', candidats, recherche, bibliotheque, note: note || '', faits: [], sites: [], ecartes: [] });
       insp = r2.inspiration;
       progres = true;
     }
@@ -564,7 +769,7 @@ export async function avancerInspiration(id, { budgetSiteMs = DEBUT_SITE_MAX_MS,
           await ajouterMetier(c.siteId, rec.brief?.sector);
           ok = true;
         } else {
-          await traiterSite(c, rec);
+          await traiterSite(c, { brief: rec.brief || {}, metier: rec.brief?.sector || '' });
           ok = true;
         }
       } catch (e) {
@@ -605,6 +810,7 @@ export async function avancerInspiration(id, { budgetSiteMs = DEBUT_SITE_MAX_MS,
         return r;
       });
       await noterAttente(id, false);
+      await noterUsage(fiches.map((f) => f.id), id);
       return { continuer: false, statut: 'pret' };
     }
     return { continuer: true, statut: insp.statut };
@@ -726,6 +932,7 @@ export function vueInspiration(rec, index) {
     total: (i.candidats || []).length,
     faits: (i.faits || []).length,
     recherche: i.recherche || '',
+    bibliotheque: i.bibliotheque || '',
     note: i.alerte || i.note || '',
     erreur: i.erreur || '',
     ecartes: (i.ecartes || []).slice(-10),

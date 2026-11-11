@@ -139,6 +139,9 @@ function InspirationReglage({ value, onChange }) {
       <p className="q-hint">
         Quand un client envoie son questionnaire, l’agent visite les sites qu’il a cités et quelques très bons sites de son métier, les prend en capture et note leurs fonctionnalités. Tout est rangé dans la page <a href="/agence/inspiration">Inspiration</a>, et les pistes nourrissent la génération des modèles. Compte environ 0,20 à 0,40 € de crédit Claude par questionnaire, moins quand la bibliothèque connaît déjà le métier.
       </p>
+      <p className="q-hint">
+        Pour remplir la bibliothèque à l’avance, métier par métier : page <a href="/agence/inspiration">Inspiration</a> › <strong>Actualiser la bibliothèque</strong>. Avec au moins 10 sites pour un métier, l’agent pioche surtout dedans : des pistes plus rapides, et des sites différents d’un client à l’autre.
+      </p>
       <label className="q-toggle compact">
         <input type="checkbox" checked={value} onChange={(e) => onChange(e.target.checked)} />
         <span>
