@@ -2,7 +2,7 @@
 // Demandes (pages en plus, style…), historique des versions et accès à l'espace
 import { useState } from 'react';
 import { Section } from './Rubriques.jsx';
-import { Zone, Choix, Confirmer, fmtQuand, fmtJour, fmtEuros } from './Champs.jsx';
+import { Zone, Choix, Confirmer, Interrupteur, fmtQuand, fmtJour, fmtEuros } from './Champs.jsx';
 import { GESTIONS } from '../../../engine/espace.js';
 import { copyText } from '../../api.js';
 
@@ -312,6 +312,23 @@ export function Acces({ srv, action, occupe, onDeconnexion }) {
           </p>
         )}
       </Section>
+
+      {!client && (
+        <Section id="sec-editeur-client" titre="Éditeur « Mise en page et textes »" intro="Réservé à toi par défaut. Ouvert au client, il peut aussi changer les textes, l’ordre des sections et les photos de chaque emplacement.">
+          <Interrupteur
+            label="Le client peut aussi utiliser l’éditeur"
+            aide={srv.editeurClient ? 'L’onglet apparaît dans son espace.' : 'L’onglet n’apparaît pas dans son espace.'}
+            checked={Boolean(srv.editeurClient)}
+            disabled={occupe}
+            onChange={async (v) => {
+              setErr('');
+              const r = await action('editeurClient', { ouvert: v });
+              if (!r.ok) setErr(r.data?.error || 'Le réglage n’a pas été changé. Réessayez.');
+              else setNote(v ? 'Le client voit maintenant l’onglet « Mise en page et textes ».' : 'L’onglet « Mise en page et textes » est de nouveau réservé à toi.');
+            }}
+          />
+        </Section>
+      )}
 
       <Section id="sec-appareils" titre={client ? 'Vos appareils' : 'Appareils du client'} intro={client ? 'Les appareils où votre espace s’ouvre sans lien. Retirez celui que vous n’utilisez plus, ou qui a été perdu.' : ''}>
         {srv.appareils.length === 0 ? (

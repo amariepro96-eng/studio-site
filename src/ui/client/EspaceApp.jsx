@@ -1,13 +1,15 @@
 'use client';
-// Espace client : le client modifie son site en ligne (horaires, prix, annonces, photos), voit
-// l'aperçu tout de suite, puis publie. Ouvert aussi par l'agence (vue agence) si le client l'a permis.
+// Espace client : le client modifie son site en ligne (horaires, prix, annonces, photos ; textes et
+// mise en page dans l'onglet « Mise en page et textes »), voit l'aperçu tout de suite, puis publie. Ouvert aussi par l'agence (vue agence) si le client l'a permis.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BrandMark, ClientShell, Spinner } from '../Chrome.jsx';
 import { DeviceToggle, PageTabs } from '../Frames.jsx';
-import { renderPage, sitePages } from '../../engine/render.js';
+import { renderPage, sitePages, resolveModel } from '../../engine/render.js';
+import { herosDuStyle } from '../../engine/trames.js';
 import { renderImages, renderBrief } from '../../engine/records.js';
 import { nettoyer, appliquer, resume, fusion3, memeEtat, aujourdhui, jourTexte, RAISONS_ATTENTE } from '../../engine/espace.js';
 import { Horaires, Liste, Annonces, Photos } from './espace/Rubriques.jsx';
+import { Editeur } from './espace/Editeur.jsx';
 import { Demandes, Historique, Acces } from './espace/Suivi.jsx';
 import { Confirmer, fmtQuand } from './espace/Champs.jsx';
 
@@ -54,6 +56,7 @@ function zonesChangees(a, b) {
     boutique: !eq(a.produits, b.produits),
     annonces: !eq(ann(a), ann(b)),
     photos: !eq([a.photos, a.ia], [b.photos, b.ia]),
+    editeur: !eq([a.textes, a.listes, a.edition], [b.textes, b.listes, b.edition]),
   };
 }
 
@@ -62,6 +65,7 @@ function ongletDe(cle, etat) {
   if (cle.startsWith('services.')) return 'offre';
   if (cle.startsWith('produits.')) return 'boutique';
   if (cle === 'photos') return 'photos';
+  if (cle.startsWith('listes.')) return 'editeur';
   const m = cle.match(/^annonces\.(\d+)/);
   if (m) return etat?.annonces?.[Number(m[1])]?.type === 'fermeture' ? 'horaires' : 'annonces';
   return 'horaires';
@@ -70,12 +74,26 @@ function ongletDe(cle, etat) {
 const WIDTHS = { desktop: '100%', tablet: '820px', mobile: '390px' };
 
 // Aperçu : même rendu que le site publié ; la position de lecture est gardée à chaque changement
-function ApercuFrame({ html, device, page, onNavigate, title }) {
+// Éditeur : un clic sur une section de l'aperçu la choisit ; une section choisie dans la liste y est montrée
+function ApercuFrame({ html, device, page, onNavigate, title, onChoisir, voir }) {
   const ref = useRef(null);
   const positions = useRef({});
+  const aMontrer = useRef(null);
+  // La section à montrer attend que l'aperçu la contienne (elle vient peut-être d'être ajoutée)
+  useEffect(() => {
+    if (!voir?.id) return undefined;
+    aMontrer.current = voir.id;
+    ref.current?.contentWindow?.postMessage({ type: 'ed-voir', id: voir.id }, '*');
+    const t = setTimeout(() => {
+      if (aMontrer.current === voir.id) aMontrer.current = null;
+    }, 4000);
+    return () => clearTimeout(t);
+  }, [voir]);
   useEffect(() => {
     function onMsg(e) {
       if (!ref.current || e.source !== ref.current.contentWindow || !e.data) return;
+      if (e.data.type === 'ed-choisir') onChoisir?.(String(e.data.id || ''));
+      if (e.data.type === 'ed-vu' && e.data.id === aMontrer.current) aMontrer.current = null;
       if (e.data.type === 'site-nav') {
         positions.current[String(e.data.page)] = 0;
         onNavigate?.(String(e.data.page));
@@ -84,10 +102,11 @@ function ApercuFrame({ html, device, page, onNavigate, title }) {
     }
     window.addEventListener('message', onMsg);
     return () => window.removeEventListener('message', onMsg);
-  }, [onNavigate, page]);
+  }, [onNavigate, page, onChoisir]);
   const onLoad = () => {
     const y = positions.current[page];
     if (y) ref.current?.contentWindow?.postMessage({ type: 'site-scroll-to', y }, '*');
+    if (aMontrer.current) ref.current?.contentWindow?.postMessage({ type: 'ed-voir', id: aMontrer.current }, '*');
   };
   return (
     <div className={`device device-${device}`}>
@@ -246,6 +265,8 @@ export default function EspaceApp({ id, vueAgence = false }) {
   const [page, setPage] = useState('index');
   const [device, setDevice] = useState('desktop');
   const [jourApercu, setJourApercu] = useState('');
+  const [choisi, setChoisi] = useState(null);
+  const [voirSection, setVoirSection] = useState(null);
   const [vueMobile, setVueMobile] = useState('edit');
   const [origin, setOrigin] = useState('');
   const [pub, setPub] = useState(null);
@@ -430,7 +451,27 @@ export default function EspaceApp({ id, vueAgence = false }) {
   }, [srv, etatVu, origin, id]);
   const pages = useMemo(() => (apercu ? [...sitePages(apercu.brief, apercu.content), { slug: 'mentions-legales', label: 'Mentions légales' }] : []), [apercu]);
   const pageVue = pages.some((p) => p.slug === page) ? page : 'index';
-  const html = useMemo(() => (apercu && srv?.dossier?.model ? renderPage(pageVue, { ...apercu, model: srv.dossier.model, mode: 'preview', jour: jourApercu || jour }) : ''), [apercu, srv, pageVue, jourApercu, jour]);
+  const enEditeur = onglet === 'editeur';
+  const idApercu = choisi ? (pageVue === 'index' ? choisi : `p-${choisi}`) : null;
+  const html = useMemo(
+    () => (apercu && srv?.dossier?.model ? renderPage(pageVue, { ...apercu, model: srv.dossier.model, mode: 'preview', jour: jourApercu || jour, editeur: enEditeur ? { choisi: idApercu } : null }) : ''),
+    [apercu, srv, pageVue, jourApercu, jour, enEditeur, idApercu]
+  );
+  // Haut de page : ceux que le style du site sait afficher
+  const modele = useMemo(() => {
+    try {
+      return srv?.dossier?.model ? resolveModel(srv.dossier.model) : null;
+    } catch {
+      return null;
+    }
+  }, [srv]);
+  const heroes = useMemo(() => (modele ? herosDuStyle(modele.arch.id, modele.comp.heroes) : []), [modele]);
+  // Clic sur une section de l'aperçu : ses réglages s'ouvrent (sur téléphone, on revient à la liste)
+  const choisirSection = useCallback((idSection) => {
+    const brut = String(idSection || '');
+    setChoisi((brut.startsWith('p-') ? brut.slice(2) : brut) || null);
+    setVueMobile('edit');
+  }, []);
 
   const maj = useCallback((fn) => {
     setBrouillon((b) => {
@@ -443,7 +484,8 @@ export default function EspaceApp({ id, vueAgence = false }) {
   const ouvrirOnglet = useCallback(
     (o) => {
       setOnglet(o);
-      const cible = { horaires: 'contact', offre: pages.some((p) => p.slug === 'services') ? 'services' : 'index', boutique: 'boutique', annonces: 'index', photos: 'index' }[o];
+      const cible = { horaires: 'contact', offre: pages.some((p) => p.slug === 'services') ? 'services' : 'index', boutique: 'boutique', annonces: 'index', photos: 'index', editeur: 'index' }[o];
+      setChoisi(null);
       if (cible) setPage(cible);
       setVoirListe(false);
     },
@@ -588,6 +630,7 @@ export default function EspaceApp({ id, vueAgence = false }) {
     ...(boutique ? [{ id: 'boutique', label: 'Boutique' }] : []),
     { id: 'annonces', label: 'Annonces et fêtes' },
     { id: 'photos', label: 'Photos' },
+    ...(srv.editeur ? [{ id: 'editeur', label: 'Mise en page et textes' }] : []),
     { id: 'demandes', label: 'Demandes', badge: devisAttente },
     { id: 'historique', label: 'Historique' },
     { id: 'acces', label: client ? 'Mon accès' : 'Accès du client' },
@@ -606,6 +649,30 @@ export default function EspaceApp({ id, vueAgence = false }) {
       break;
     case 'photos':
       panneau = <Photos {...props} />;
+      break;
+    case 'editeur':
+      panneau = srv.editeur ? (
+        <Editeur
+          {...props}
+          pages={pages}
+          page={pageVue}
+          onPage={(p) => {
+            setPage(p);
+            setChoisi(null);
+          }}
+          choisi={choisi}
+          onChoisir={(idSection, montrer) => {
+            setChoisi(idSection || null);
+            if (idSection && montrer) setVoirSection({ id: pageVue === 'index' ? idSection : `p-${idSection}`, n: Date.now() });
+          }}
+          images={apercu?.images || []}
+          boutique={boutique}
+          offre={label}
+          heroes={heroes}
+          heroModele={modele?.variants?.hero || ''}
+          ouvrirOnglet={ouvrirOnglet}
+        />
+      ) : null;
       break;
     case 'demandes':
       panneau = <Demandes srv={srv} action={action} actionAgence={actionAgence} occupe={occupe} />;
@@ -675,7 +742,7 @@ export default function EspaceApp({ id, vueAgence = false }) {
         </div>
       </div>
 
-      <div className={`esp-grid vue-${vueMobile}`}>
+      <div className={`esp-grid vue-${vueMobile}${enEditeur ? ' ed-mode' : ''}`}>
         <section className="esp-edit" aria-label="Modifier le site">
           {srv.proposition && (
             <div className="esp-banniere prop">
@@ -858,7 +925,22 @@ export default function EspaceApp({ id, vueAgence = false }) {
               </>
             )}
           </p>
-          <div className="stage">{html && <ApercuFrame html={html} device={device} page={pageVue} onNavigate={setPage} title={`Aperçu du site ${srv.nom}`} />}</div>
+          <div className="stage">
+            {html && (
+              <ApercuFrame
+                html={html}
+                device={device}
+                page={pageVue}
+                onNavigate={(p) => {
+                  setPage(p);
+                  setChoisi(null);
+                }}
+                title={`Aperçu du site ${srv.nom}`}
+                onChoisir={enEditeur ? choisirSection : undefined}
+                voir={voirSection}
+              />
+            )}
+          </div>
         </section>
       </div>
 

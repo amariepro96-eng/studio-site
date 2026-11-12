@@ -10,15 +10,17 @@
 //  - Invitation valable 7 jours ; lien pour un autre appareil ou reçu par e-mail : 15 minutes.
 //  - Chaque appareil se retire séparément ; l'agence peut tout couper d'un clic.
 // Modifications
-//  - Le client ne change que des valeurs (horaires, prix, statuts, annonces, photos) : le site
-//    est reconstruit par le moteur avec les blocs de son modèle, jamais avec du HTML reçu.
+//  - Le client ne change que des valeurs (horaires, prix, statuts, annonces, photos ; textes, ordre
+//    des sections et photos imposées dans l'éditeur) : le site est reconstruit par le moteur avec
+//    les blocs de son modèle, jamais avec du HTML reçu.
 //  - Le serveur refait tous les contrôles, fusionne avec les changements faits entre-temps,
 //    garde chaque version (retour en arrière possible) et limite les publications par jour.
 import crypto from 'node:crypto';
 import { readCookie, safeEqual, isAgency } from './http.js';
 import { mailPret, envoyerMail, emailValide } from './mail.js';
 import { editable, nettoyer, appliquer, fusion3, resume, assurerIds, aujourdhui, peutModifier, gestionValide, LIMITE_JOUR, memeEtat, RAISONS_ATTENTE } from '../engine/espace.js';
-import { servicesLabel } from '../engine/render.js';
+import { servicesLabel, resolveModel } from '../engine/render.js';
+import { sectionsDeJetons } from '../engine/edition.js';
 import { PAGES } from '../engine/questions.js';
 import { heriterInfos } from './photosIa.js';
 import { infosPubliques } from './public.js';
@@ -51,6 +53,7 @@ export function espaceDe(r) {
     pubs: Array.isArray(e.pubs) ? e.pubs : [],
     images: Array.isArray(e.images) ? e.images : [],
     invitation: e.invitation || null,
+    editeur: e.editeur === true, // le client peut aussi utiliser l'éditeur (mise en page et textes)
   };
 }
 
@@ -89,7 +92,20 @@ export function preparer(r, { par = 'agence' } = {}) {
   return change;
 }
 
-export const dossierDe = (r) => ({ brief: r.brief || {}, content: r.result?.content || {}, aiImages: r.aiImages || [] });
+export const modeleChoisi = (r) => r?.result?.models?.find((m) => m.id === r?.choice?.modelId) || null;
+// Sections de la page d'accueil telles que le modèle les affiche (point de départ de l'éditeur)
+export function sectionsDuModele(model) {
+  if (!model) return null;
+  try {
+    return sectionsDeJetons(resolveModel(model).tokens);
+  } catch {
+    return null;
+  }
+}
+export const dossierDe = (r) => {
+  const model = modeleChoisi(r);
+  return { brief: r.brief || {}, content: r.result?.content || {}, aiImages: r.aiImages || [], model, sections: sectionsDuModele(model) };
+};
 
 // ---------- Liens à usage unique ----------
 export function creerLien(e, type, par) {
@@ -217,8 +233,8 @@ export const publicationsDuJour = (e) => e.pubs.filter((at) => auJour(at) === au
 
 export function vueEspace(rec, { role, appareil = null, settings }) {
   const e = espaceDe(rec);
-  const model = rec.result?.models?.find((m) => m.id === rec.choice?.modelId) || null;
   const d = dossierDe(rec);
+  const model = d.model;
   const owner = settings?.ownerName || 'Votre interlocuteur';
   const pagesSite = new Set(rec.brief?.pages || []);
   return {
@@ -229,6 +245,8 @@ export function vueEspace(rec, { role, appareil = null, settings }) {
     gestion: e.gestion,
     validation: e.validation,
     peutModifier: peutModifier(e.gestion, role),
+    editeur: role === 'agence' || e.editeur, // onglet « Mise en page et textes »
+    editeurClient: e.editeur,
     site: {
       url: rec.liveUrl || rec.publication?.url || '',
       version: rec.publication?.version || 0,
@@ -236,7 +254,7 @@ export function vueEspace(rec, { role, appareil = null, settings }) {
       publieLe: rec.publication?.publishedAt || '',
       auto: Boolean(rec.publication?.repo && rec.publication?.projectId),
     },
-    dossier: { id: rec.id, brief: d.brief, content: d.content, model, aiImages: d.aiImages, stockImages: rec.stockImages || [], imageInfo: infosPubliques(rec.imageInfo), hosting: settings?.hosting || '' },
+    dossier: { id: rec.id, brief: d.brief, content: d.content, model, sections: d.sections, aiImages: d.aiImages, stockImages: rec.stockImages || [], imageInfo: infosPubliques(rec.imageInfo), hosting: settings?.hosting || '' },
     etat: etatActuel(rec),
     boutique: rec.brief?.siteType === 'boutique',
     servicesLabel: servicesLabel(rec.brief || {}),
@@ -272,12 +290,15 @@ export function imagesConnues(rec) {
 export const etatActuel = (rec) => nettoyer(editable(dossierDe(rec)), { boutique: rec.brief?.siteType === 'boutique', jour: '2000-01-01' }).etat;
 
 // Fusionne les changements reçus avec l'état actuel du dossier, puis contrôle le résultat
-export function preparerEtat(rec, { etat, base }) {
+export function preparerEtat(rec, { etat, base, sansEditeur = false }) {
   const opts = { idsImages: imagesConnues(rec), boutique: rec.brief?.siteType === 'boutique' };
   const norm = (x) => nettoyer(x, { boutique: opts.boutique, jour: '2000-01-01' }).etat;
   const actuel = etatActuel(rec);
   const propreBase = base && typeof base === 'object' ? norm(base) : actuel;
-  const fusion = fusion3(propreBase, norm(etat), actuel);
+  const mien = norm(etat);
+  // Éditeur non ouvert à ce client : ses textes et sa mise en page restent ceux du site
+  if (sansEditeur) for (const k of ['textes', 'listes', 'edition']) if (k in actuel) mien[k] = propreBase[k] ?? actuel[k];
+  const fusion = fusion3(propreBase, mien, actuel);
   const { etat: propre, erreurs } = nettoyer(fusion, opts);
   return { actuel, propre, erreurs, changements: resume(actuel, propre) };
 }
@@ -285,9 +306,10 @@ export function preparerEtat(rec, { etat, base }) {
 // Écrit l'état dans le dossier et note la version (dans une mise à jour du dossier)
 export function enregistrerEtat(r, { etat, changements, par, validePar = null, annulation = false }) {
   const e = espaceDe(r);
+  const avantEditeur = e.versions.some((x) => x.etat && !x.etat.textes) ? etatActuel(r) : null;
   const appli = appliquer(dossierDe(r), etat);
   const b = { ...(r.brief || {}) };
-  for (const k of ['hours', 'phone', 'email', 'address', 'instagram', 'facebook', 'photos']) b[k] = appli.brief[k];
+  for (const k of ['hours', 'phone', 'email', 'address', 'instagram', 'facebook', 'photos', 'reviews']) b[k] = appli.brief[k];
   // Une image remplacée par le client garde la place de l'ancienne dans le site
   heriterInfos(r, r.brief?.photos || [], b.photos || []);
   heriterInfos(r, r.aiImages || [], appli.aiImages || []);
@@ -303,6 +325,9 @@ export function enregistrerEtat(r, { etat, changements, par, validePar = null, a
     v = vivantes[vivantes.length - 2]?.v || 1;
     e.versions = e.versions.map((x) => (x === cur ? { ...x, annulee: true, annuleeLe: at, annuleePar: par } : x));
   } else {
+    // Versions enregistrées avant l'éditeur : on leur ajoute les textes et la mise en page d'alors
+    // (inchangés jusqu'ici), pour que « Remettre la version précédente » les rétablisse aussi
+    if (avantEditeur) e.versions = e.versions.map((x) => (x.etat && !x.etat.textes ? { ...x, etat: { ...x.etat, textes: avantEditeur.textes, listes: avantEditeur.listes, edition: avantEditeur.edition } } : x));
     v = Math.max(0, ...e.versions.map((x) => x.v)) + 1;
     e.versions = [...e.versions, { v, at, par, validePar, resume: changements.slice(0, 40), etat: etatActuel(r) }].slice(-25);
   }

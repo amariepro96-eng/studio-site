@@ -8,9 +8,11 @@
 //   réponses de la FAQ
 //   annonces datées (fermeture exceptionnelle, fête, information)
 //   photos (remplacer, ajouter, retirer)
+//   textes du site, sections de la page d'accueil, photos imposées (éditeur « Mise en page et textes »)
 // Le client ne touche jamais au HTML : le site est entièrement reconstruit par le moteur,
 // avec les mêmes blocs que le modèle qu'il a choisi.
 import { formatPrice, priceNumber } from './util.js';
+import { TEXTES, LISTES, nettoyerEdition, signatureModele, memesSections, accueilLie, clePage, nomModule, sectionsUtiles } from './edition.js';
 
 // ---------- Dates (jour seul, heure de Paris) ----------
 const pad = (n) => String(n).padStart(2, '0');
@@ -247,9 +249,45 @@ const offreEnCours = (it, jour) => jourValide(it.offreFin) && it.offreFin >= jou
 const S = (v, max) => (typeof v === 'string' ? v : v == null ? '' : String(v)).slice(0, max);
 const prixTexte = (p) => (p === null || p === undefined ? '' : typeof p === 'number' ? (Number.isInteger(p) ? String(p) : p.toFixed(2).replace('.', ',')) : String(p));
 
-export function editable({ brief, content, aiImages }, jour = aujourdhui()) {
+// ---------- Textes et mise en page (éditeur) ----------
+const lire = (obj, chemin) => chemin.split('.').reduce((o, k) => (o == null ? undefined : o[k]), obj);
+function ecrire(obj, chemin, v) {
+  const ks = chemin.split('.');
+  const out = { ...obj };
+  let o = out;
+  for (const k of ks.slice(0, -1)) {
+    o[k] = o[k] && typeof o[k] === 'object' && !Array.isArray(o[k]) ? { ...o[k] } : {};
+    o = o[k];
+  }
+  o[ks[ks.length - 1]] = v;
+  return out;
+}
+// Texte remis en forme comme après un contrôle (espaces superflus, lignes vides en trop)
+export function normTexte(v, d) {
+  const t = S(v, d.max).replace(/\r/g, '');
+  return d.lignes > 1 ? t.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim() : t.replace(/\s+/g, ' ').trim();
+}
+const heroDuModele = (model) => ({ heroTitre: model?.headline || '', heroSous: model?.subheadline || '', heroBouton: model?.cta || '' });
+const texteDuDossier = (k, d, b, c, model) => {
+  let v;
+  if (d.chemin.startsWith('edition.hero.')) v = lire(c, d.chemin) || heroDuModele(model)[k];
+  else if (d.chemin.startsWith('brief.')) v = b[d.chemin.slice(6)];
+  else v = lire(c, d.chemin);
+  if (d.paragraphes && Array.isArray(v)) v = v.join('\n\n');
+  return normTexte(v, d);
+};
+const listeDuDossier = (k, d, c) =>
+  (Array.isArray(lire(c, d.chemin)) ? lire(c, d.chemin) : []).slice(0, d.max).map((it, i) => ({ id: `${k.slice(0, 2)}${i}`, titre: normTexte(it?.title, { max: 120, lignes: 1 }), texte: normTexte(it?.text, { max: 400, lignes: 3 }) }));
+
+export function editable({ brief, content, aiImages, model = null, sections = null }, jour = aujourdhui()) {
   const b = brief || {};
   const c = content || {};
+  const boutique = b.siteType === 'boutique';
+  const ed = nettoyerEdition(c.edition, { boutique });
+  const lie = accueilLie(c, model);
+  // L'accueil tel qu'il s'affiche : la liste modifiée si elle vaut pour ce modèle, sinon celle du modèle
+  const accueil = (lie && ed.accueil) || sectionsUtiles(sections, boutique);
+  const photos = Object.fromEntries(Object.entries(ed.photos).filter(([k]) => clePage(k) || lie));
   return {
     horaires: S(b.hours, 600),
     telephone: S(b.phone, 40),
@@ -291,6 +329,9 @@ export function editable({ brief, content, aiImages }, jour = aujourdhui()) {
     annonces: (c.annonces || []).filter((a) => a && !annonceTerminee(a, jour)).map((a) => ({ ...a })),
     photos: (b.photos || []).map((p) => ({ id: p.id, ext: p.ext, alt: S(p.alt, 160) })),
     ia: (aiImages || []).map((p) => ({ id: p.id, ext: p.ext, alt: S(p.alt, 160), ...(p.reel ? { reel: true } : {}) })),
+    textes: Object.fromEntries(Object.entries(TEXTES).map(([k, d]) => [k, texteDuDossier(k, d, b, c, model)])),
+    listes: Object.fromEntries(Object.entries(LISTES).map(([k, d]) => [k, listeDuDossier(k, d, c)])),
+    edition: { accueil, photos },
   };
 }
 
@@ -324,7 +365,7 @@ function remplacerPartout(v, paires) {
 }
 
 // Applique un état modifiable au dossier (le reste du dossier ne change pas)
-export function appliquer({ brief, content, aiImages }, e) {
+export function appliquer({ brief, content, aiImages, model = null, sections = null }, e) {
   const b = { ...(brief || {}) };
   b.hours = e.horaires;
   b.phone = e.telephone;
@@ -368,10 +409,68 @@ export function appliquer({ brief, content, aiImages }, e) {
     c.faq = content.faq.map((f, i) => (rep.has('f' + i) && rep.get('f' + i).trim() ? { ...f, a: rep.get('f' + i) } : f));
   }
   c.annonces = e.annonces.map((a) => ({ id: a.id, type: a.type, ...(a.type === 'fete' ? { fete: a.fete, annuel: a.annuel !== false } : {}), message: a.message, du: a.du, au: a.au }));
+  c = appliquerEditeur(c, b, { content, model, sections }, e);
   const paires = remplacements(brief, e);
   if (paires.length) c = remplacerPartout(c, paires);
   const ia = e.ia.map((p) => ({ id: p.id, ext: p.ext, alt: p.alt || '', ...(p.reel ? { reel: true } : {}) }));
   return { brief: b, content: c, aiImages: ia };
+}
+
+// Textes, listes et mise en page venus de l'éditeur. Un texte qui n'a pas changé n'est pas réécrit :
+// le contenu d'un site jamais passé par l'éditeur reste tel quel.
+function appliquerEditeur(c, b, { content, model, sections }, e) {
+  const boutique = b.siteType === 'boutique';
+  let hero = { ...(content?.edition?.hero || {}) };
+  if (e.textes && typeof e.textes === 'object') {
+    const defaut = heroDuModele(model);
+    for (const [k, d] of Object.entries(TEXTES)) {
+      if (typeof e.textes[k] !== 'string') continue;
+      const v = normTexte(e.textes[k], d);
+      if (v === texteDuDossier(k, d, b, content || {}, model)) continue;
+      if (d.chemin.startsWith('edition.hero.')) {
+        const cle = d.chemin.split('.')[2];
+        if (v && v !== normTexte(defaut[k], d)) hero[cle] = v;
+        else delete hero[cle];
+      } else if (d.chemin.startsWith('brief.')) b[d.chemin.slice(6)] = v;
+      else if (d.paragraphes) c = ecrire(c, d.chemin, v.split(/\n\s*\n/).map((x) => x.trim()).filter(Boolean));
+      else c = ecrire(c, d.chemin, v);
+    }
+  }
+  if (e.listes && typeof e.listes === 'object') {
+    for (const [k, d] of Object.entries(LISTES)) {
+      const l = e.listes[k];
+      if (!Array.isArray(l)) continue;
+      const avant = Array.isArray(lire(content, d.chemin)) ? lire(content, d.chemin) : [];
+      if (egal(listeDuDossier(k, d, content || {}), l.map((x) => ({ id: x.id, titre: x.titre, texte: x.texte })))) continue;
+      const nouv = l.map((x) => {
+        const m = String(x.id || '').match(/^[a-z]{2}(\d{1,2})$/);
+        const old = m ? avant[Number(m[1])] : null;
+        return { ...(old || (d.icone ? { icon: 'check' } : {})), title: x.titre, text: x.texte };
+      });
+      c = ecrire(c, d.chemin, nouv);
+    }
+  }
+  if (e.edition && typeof e.edition === 'object') {
+    // L'état contient tout : la liste affichée et toutes les photos imposées (pages et sections)
+    const ed = nettoyerEdition(e.edition, { boutique });
+    const photos = ed.photos;
+    const parDefaut = Boolean(ed.accueil) && memesSections(ed.accueil, sectionsUtiles(sections, boutique));
+    const accueil = ed.accueil && !parDefaut ? ed.accueil : null;
+    const dePages = Object.keys(photos).every(clePage);
+    const out = {
+      ...(accueil || !dePages ? { pour: signatureModele(model) } : {}),
+      ...(accueil ? { accueil } : {}),
+      ...(Object.keys(photos).length ? { photos } : {}),
+    };
+    c = { ...c, edition: out };
+  }
+  if (c.edition || Object.keys(hero).length) {
+    const out = { ...(c.edition || {}), ...(Object.keys(hero).length ? { hero } : {}) };
+    if (!Object.keys(hero).length) delete out.hero;
+    if (Object.keys(out).length) c.edition = out;
+    else delete c.edition;
+  }
+  return c;
 }
 
 // ---------- Contrôles (les mêmes côté navigateur et côté serveur) ----------
@@ -497,6 +596,28 @@ export function nettoyer(brut, { jour = aujourdhui(), idsImages = null, boutique
   out.photos = (Array.isArray(e.photos) ? e.photos : []).map((p) => img(p, false)).filter(Boolean);
   if (out.photos.length > MAX_PHOTOS) erreurs.photos = `${MAX_PHOTOS} photos au maximum : retirez-en une avant d’en ajouter.`;
   out.ia = (Array.isArray(e.ia) ? e.ia : []).map((p) => img(p, true)).filter(Boolean).slice(0, 20);
+
+  // Éditeur : textes, listes (points forts, valeurs, étapes), sections de l'accueil et photos imposées.
+  // Absents d'un état venu d'une ancienne version de l'espace : le site garde alors les siens.
+  if (e.textes && typeof e.textes === 'object') out.textes = Object.fromEntries(Object.entries(TEXTES).map(([k, d]) => [k, normTexte(e.textes[k], d)]));
+  if (e.listes && typeof e.listes === 'object') {
+    out.listes = {};
+    for (const [k, d] of Object.entries(LISTES)) {
+      const vus = new Set();
+      out.listes[k] = (Array.isArray(e.listes[k]) ? e.listes[k] : []).slice(0, d.max).map((x, i) => {
+        let id = /^[a-z0-9]{2,16}$/i.test(x?.id || '') ? x.id : nouvelId(k.slice(0, 2) + 'n');
+        while (vus.has(id)) id = nouvelId(k.slice(0, 2) + 'n');
+        vus.add(id);
+        const it = { id, titre: normTexte(x?.titre, { max: 120, lignes: 1 }), texte: normTexte(x?.texte, { max: 400, lignes: 3 }) };
+        if (!it.titre) erreurs[`listes.${k}.${i}.titre`] = 'Indiquez un titre (ou retirez la ligne).';
+        return it;
+      });
+    }
+  }
+  if (e.edition && typeof e.edition === 'object') {
+    const ed = nettoyerEdition(e.edition, { boutique });
+    out.edition = { accueil: ed.accueil, photos: ed.photos };
+  }
   return { etat: out, erreurs };
 }
 
@@ -619,6 +740,48 @@ export function resume(avant, apres) {
     return old && old.alt !== p.alt;
   }).length;
   if (legendes) out.push(legendes > 1 ? `${legendes} descriptions de photos modifiées` : 'Description d’une photo modifiée');
+  out.push(...resumeEditeur(avant, apres));
+  return out;
+}
+
+// Changements faits dans l'éditeur, en clair
+function resumeEditeur(avant, apres) {
+  const out = [];
+  if (avant.textes && apres.textes) {
+    for (const [k, d] of Object.entries(TEXTES)) {
+      const a = avant.textes[k] || '';
+      const b = apres.textes[k] || '';
+      if (a === b) continue;
+      const nom = d.nom || d.label;
+      out.push(b ? `${nom} : « ${court(b.replace(/\s+/g, ' '), 60)} »` : `${nom} : ${k === 'heroBouton' ? 'texte automatique' : 'retiré'}`);
+    }
+  }
+  if (avant.listes && apres.listes) for (const [k, d] of Object.entries(LISTES)) if (!egal(avant.listes[k], apres.listes[k])) out.push(d.resume);
+  const ea = avant.edition;
+  const eb = apres.edition;
+  if (ea && eb) {
+    const A = ea.accueil || [];
+    const B = eb.accueil || [];
+    const nom = (s) => `« ${nomModule(s.t)} »`;
+    const parA = new Map(A.map((s) => [s.id, s]));
+    const parB = new Map(B.map((s) => [s.id, s]));
+    for (const s of B) {
+      const o = parA.get(s.id);
+      if (!o) out.push(`Accueil : section ${nom(s)} ajoutée`);
+      else {
+        if (Boolean(o.cache) !== Boolean(s.cache)) out.push(`Accueil : section ${nom(s)} ${s.cache ? 'masquée' : 'affichée'}`);
+        if ((o.v || '') !== (s.v || '')) out.push(`Accueil : nouveau style pour ${nom(s)}`);
+      }
+    }
+    for (const s of A) if (!parB.has(s.id)) out.push(`Accueil : section ${nom(s)} retirée`);
+    const ordreA = A.filter((s) => parB.has(s.id)).map((s) => s.id);
+    const ordreB = B.filter((s) => parA.has(s.id)).map((s) => s.id);
+    if (!egal(ordreA, ordreB)) out.push('Accueil : ordre des sections modifié');
+    const cles = new Set([...Object.keys(ea.photos || {}), ...Object.keys(eb.photos || {})]);
+    let photos = 0;
+    for (const k of cles) if (!egal(ea.photos?.[k] || [], eb.photos?.[k] || [])) photos++;
+    if (photos) out.push(photos > 1 ? `Photos choisies pour ${photos} emplacements` : 'Photos choisies pour un emplacement');
+  }
   return out;
 }
 

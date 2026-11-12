@@ -10,6 +10,7 @@ import { esc, rng, pick, formatPrice, priceNumber, slugify, lines, hashString } 
 import { distributeur, imageUtilisable, memeService } from './placement.js';
 import { mix, onColor, ensureContrast, isHex, luminance, alpha } from './color.js';
 import { aujourdhui, jourValide, decaler, jourTexte, fenetreAnnonce, dansFenetre, texteAnnonce, iconeDe, iconeSvg, feteParId, motifUrl } from './espace.js';
+import { accueilEdite, accueilLie, photosImposees, heroValide, nomModule, blocsDePage } from './edition.js';
 
 const SERIF_FONTS = ['Fraunces', 'Cormorant Garamond', 'Young Serif', 'Lora', 'Alfa Slab One', 'Marcellus', 'Shippori Mincho', 'Playfair Display', 'Source Serif 4', 'Instrument Serif', 'Libre Caslon Display', 'Libre Caslon Text', 'Bodoni Moda', 'Cinzel', 'DM Serif Display', 'Alegreya', 'Zilla Slab', 'Gilda Display', 'EB Garamond', 'Libre Baskerville', 'Abril Fatface', 'Limelight', 'Prata', 'Italiana'];
 const LIGHT_ART = ['serif', 'soft', 'grid', 'leaf', 'blob', 'arch', 'confetti', 'sunset'];
@@ -162,7 +163,7 @@ function servicesIllustres(m, brief, content, page) {
   return Boolean(t) && VARIANTES_IMAGEES.has(shop ? m.variants?.services : t.v || m.variants?.services);
 }
 
-function makeCtx({ brief, content, model, images, mode, page, imageSize, jour }) {
+function makeCtx({ brief, content, model, images, mode, page, imageSize, jour, editeur }) {
   const m = resolveModel(model);
   const arch = m.arch;
   const t = computeTheme(arch, m.paletteIndex, brief.color);
@@ -193,6 +194,21 @@ function makeCtx({ brief, content, model, images, mode, page, imageSize, jour })
     let ptr = n && imgs[0].source !== 'client' ? hashString(arch.id) % n : 0;
     take = (k) => Array.from({ length: k }, () => ptr++);
   }
+  // Photos imposées depuis l'éditeur : l'emplacement en cours les prend d'abord, dans l'ordre choisi
+  let imposees = [];
+  if (content?.edition?.photos) {
+    const parId = new Map(imgs.map((im, i) => [im.id, i]));
+    const auto = take;
+    take = (k, kind, opts) => {
+      if (!imposees.length) return auto(k, kind, opts);
+      const out = imposees.splice(0, k);
+      return out.length < k ? [...out, ...auto(k - out.length, kind, opts)] : out;
+    };
+    take.imposer = (ids) => {
+      imposees = (ids || []).map((id) => parId.get(id)).filter((i) => i !== undefined);
+    };
+  }
+  const imposer = (ids) => take.imposer?.(ids);
   const takeDistinct = (k, kind) => take(n ? Math.min(k, n) : k, kind);
 
   const imgAt = (slot) => (n ? imgs[((slot % n) + n) % n] : null);
@@ -207,8 +223,19 @@ function makeCtx({ brief, content, model, images, mode, page, imageSize, jour })
   const visual = (cls, slot, artOpts) => `<div class="visual ${cls}">${visualInner(slot ?? take(1)[0], artOpts)}</div>`;
 
   const name = content.brand?.name || brief.businessName || 'Votre entreprise';
-  return { brief, content, m, arch, t, pages, has, link, visual, visualInner, imgAt, take, takeDistinct, mode, page, name, imgs, jour: jourValide(jour) ? jour : aujourdhui() };
+  const accueil = page === 'index' || !page ? accueilEdite(content, model) : null;
+  const lie = accueilLie(content, model);
+  return { brief, content, m, arch, t, pages, has, link, visual, visualInner, imgAt, take, takeDistinct, imposer, accueil, lie, editeur: editeur || null, mode, page, name, imgs, jour: jourValide(jour) ? jour : aujourdhui() };
 }
+
+// Éditeur : repère chaque section dans l'aperçu (clic pour la choisir) ; rien de tout ça dans le site publié
+function marquer(ctx, id, nom, html) {
+  if (!ctx.editeur || !html || !id) return html;
+  const choisi = ctx.editeur.choisi === id ? ' data-ed-choisi' : '';
+  return html.replace(/^\s*<([a-z]+)/i, (m0, tag) => `<${tag} data-ed="${esc(id)}" data-ed-nom="${esc(nom)}"${choisi}`);
+}
+// Textes du haut de page propres au site (éditeur)
+const heroEdite = (ctx) => ctx.content?.edition?.hero || {};
 
 function primaryCta(ctx) {
   const { brief, m, link, has } = ctx;
@@ -230,6 +257,8 @@ function primaryCta(ctx) {
     label = 'Demander un devis';
   }
   if (m.cta && String(m.cta).trim().length > 1) label = String(m.cta).trim();
+  const impose = String(heroEdite(ctx).bouton || '').trim();
+  if (impose) label = impose;
   return { label, href };
 }
 
@@ -361,11 +390,12 @@ function caption(img) {
 
 // ---------- Héros ----------
 
-function hero(ctx) {
+function hero(ctx, impose) {
   const { m, content: c, visual, visualInner, brief, take } = ctx;
-  const v = m.variants.hero;
-  const h = esc(m.headline || c.hero?.headline || c.brand?.tagline || ctx.name);
-  const sub = esc(m.subheadline || c.hero?.subheadline || c.brand?.short || brief.description);
+  const v = impose || m.variants.hero;
+  const ed = heroEdite(ctx);
+  const h = esc(String(ed.titre || '').trim() || m.headline || c.hero?.headline || c.brand?.tagline || ctx.name);
+  const sub = esc(String(ed.sous || '').trim() || m.subheadline || c.hero?.subheadline || c.brand?.short || brief.description);
   const cta = primaryCta(ctx);
   const sc = secondaryCta(ctx);
   const actions = `<div class="hero-actions"><a class="btn" ${cta.href}>${esc(cta.label)}</a>${sc ? `<a class="btn ghost" ${sc.href}>${esc(sc.label)}</a>` : ''}</div>`;
@@ -655,7 +685,7 @@ function processBlock(ctx, alt, v = 'line') {
 function reviewsBlock(ctx, alt) {
   const reviews = parseReviews(ctx.brief.reviews);
   if (!reviews.length) return '';
-  return `<section class="section${alt ? ' alt' : ''}"><div class="wrap">${sectionHead('Ils nous font confiance', '', false)}<div class="reviews">${reviews
+  return `<section class="section${alt ? ' alt' : ''}"><div class="wrap">${sectionHead(ctx.content.reviewsTitle || 'Ils nous font confiance', '', false)}<div class="reviews">${reviews
     .map((r) => `<figure class="review"><blockquote>« ${esc(r.text)} »</blockquote>${r.author ? `<figcaption>${esc(r.author)}</figcaption>` : ''}</figure>`)
     .join('')}</div></div></section>`;
 }
@@ -839,7 +869,7 @@ function demiBloc(ctx, kind) {
     case 'reviews': {
       const reviews = parseReviews(brief.reviews).slice(0, 2);
       if (!reviews.length) return '';
-      return `<h2>Ils nous font confiance</h2><div class="duo-reviews">${reviews
+      return `<h2>${esc(c.reviewsTitle || 'Ils nous font confiance')}</h2><div class="duo-reviews">${reviews
         .map((r) => `<figure class="review"><blockquote>« ${esc(r.text)} »</blockquote>${r.author ? `<figcaption>${esc(r.author)}</figcaption>` : ''}</figure>`)
         .join('')}</div>`;
     }
@@ -951,7 +981,7 @@ function homeBody(ctx) {
   const out = [];
   let prev = null;
   let altNext = false;
-  const push = (html, bg) => {
+  let push = (html, bg) => {
     if (!html) return;
     if (kind && SOLID.has(prev) && SOLID.has(bg) && prev !== bg) out.push(divider(kind, prev, bg));
     out.push(html);
@@ -966,12 +996,20 @@ function homeBody(ctx) {
     push(html, alt ? 'surface' : 'bg');
     altNext = !altNext;
   };
-  const offreIndex = m.tokens.some((t) => t.name === 'offer' && t.v === 'index');
-  for (const { name, v } of m.tokens) {
+  // Sections modifiées dans l'éditeur (ordre, masquées, style) ; sinon celles du modèle
+  const edite = ctx.accueil;
+  const sections = edite ? edite.filter((s) => !s.cache).map((s) => ({ name: s.t, v: s.v, id: s.id })) : m.tokens.map((x, i) => ({ ...x, id: `${x.name}${i}` }));
+  const offreIndex = sections.some((t) => t.name === 'offer' && t.v === 'index');
+  const marque = (html, id, name) => (ctx.editeur ? marquer(ctx, id, nomModule(name, { boutique: shop, offre: servicesLabel(brief) }), html) : html);
+  for (const { name, v, id } of sections) {
+    if (ctx.lie) ctx.imposer(photosImposees(ctx.content, id));
+    // plain() passe par push() : un seul repère par section
+    const pushAvant = push;
+    if (ctx.editeur) push = (html, bg) => pushAvant(marque(html, id, name), bg);
     switch (name) {
       case 'hero': {
-        const hv = m.variants.hero;
-        push(hero(ctx), heroBg(hv));
+        const hv = edite && heroValide(v) ? v : m.variants.hero;
+        push(hero(ctx, hv), heroBg(hv));
         altNext = heroBg(hv) === 'bg';
         break;
       }
@@ -1039,6 +1077,8 @@ function homeBody(ctx) {
       default:
         break;
     }
+    push = pushAvant;
+    if (ctx.lie) ctx.imposer(null);
   }
   if (kind && !arch.stripes && SOLID.has(prev)) out.push(divider(kind, prev, 'footer'));
   return out.join('');
@@ -1052,20 +1092,36 @@ function aboutBody(ctx) {
     .map((v) => `<article class="feature"><div class="f-icon">${icon(v.icon || 'heart')}</div><h3>${esc(v.title)}</h3><p>${esc(v.text)}</p></article>`)
     .join('');
   const galTok = m.tokens.find((x) => x.name === 'gallery');
+  const b = blocsEditeur(ctx);
+  ctx.imposer(photosImposees(c, 'p-a-propos'));
+  const histoire = `<section class="section"><div class="wrap prose-grid"><div class="story">${story}</div>${visual('about-visual', ctx.take(1, 'about')[0])}</div></section>`;
+  ctx.imposer(photosImposees(c, 'p-a-propos-galerie'));
+  const galerie = gallery(ctx, false, galTok?.v === 'strip' ? 'strip' : 'grid');
+  ctx.imposer(null);
   return (
-    pageHero(ctx, a.title || 'À propos', a.intro) +
-    `<section class="section"><div class="wrap prose-grid"><div class="story">${story}</div>${visual('about-visual', ctx.take(1, 'about')[0])}</div></section>` +
-    (values ? `<section class="section alt"><div class="wrap">${sectionHead(a.valuesTitle || 'Ce qui nous guide', '', false)}<div class="values">${values}</div></div></section>` : '') +
-    gallery(ctx, false, galTok?.v === 'strip' ? 'strip' : 'grid') +
-    ctaBlock(ctx)
+    b('tete', pageHero(ctx, a.title || 'À propos', a.intro)) +
+    b('histoire', histoire) +
+    (values ? b('valeurs', `<section class="section alt"><div class="wrap">${sectionHead(a.valuesTitle || 'Ce qui nous guide', '', false)}<div class="values">${values}</div></div></section>`) : '') +
+    b('galerie', galerie) +
+    b('cta', ctaBlock(ctx))
   );
+}
+
+// Repères des blocs d'une page intérieure, pour l'éditeur
+function blocsEditeur(ctx) {
+  if (!ctx.editeur) return (id, html) => html;
+  const blocs = blocsDePage(ctx.page, { boutique: ctx.brief.siteType === 'boutique', offre: servicesLabel(ctx.brief) });
+  return (id, html) => marquer(ctx, `p-${id}`, blocs.find((x) => x.id === id)?.label || '', html);
 }
 
 function servicesBody(ctx) {
   const { content: c, brief, m, imgs } = ctx;
   const v = brief.siteType === 'boutique' ? m.variants.services : m.offerVariant;
+  const b = blocsEditeur(ctx);
+  ctx.imposer(photosImposees(c, 'p-services'));
   const pic = imgs.length ? `<div class="wrap">${ctx.visual('page-visual', ctx.take(1)[0])}</div>` : '';
-  return pageHero(ctx, c.servicesTitle || servicesLabel(brief), c.servicesIntro) + pic + `<section class="section"><div class="wrap">${servicesList(ctx, c.services || [], v)}</div></section>` + ctaBlock(ctx);
+  ctx.imposer(null);
+  return b('tete', pageHero(ctx, c.servicesTitle || servicesLabel(brief), c.servicesIntro)) + b('photo', pic) + b('liste', `<section class="section"><div class="wrap">${servicesList(ctx, c.services || [], v)}</div></section>`) + b('cta', ctaBlock(ctx));
 }
 
 function shopBody(ctx) {
@@ -1078,13 +1134,15 @@ function shopBody(ctx) {
           .map((cat) => `<button class="chip" type="button" data-filter="${esc(slugify(cat))}" aria-pressed="false">${esc(cat)}</button>`)
           .join('')}</div>`
       : '';
-  return pageHero(ctx, c.productsTitle || 'Boutique', c.productsIntro) + `<section class="section"><div class="wrap">${filters}${productCards(ctx, products)}</div></section>`;
+  const b = blocsEditeur(ctx);
+  return b('tete', pageHero(ctx, c.productsTitle || 'Boutique', c.productsIntro)) + b('liste', `<section class="section"><div class="wrap">${filters}${productCards(ctx, products)}</div></section>`);
 }
 
 function faqBody(ctx) {
   const { content: c } = ctx;
   const items = (c.faq || []).map((f, i) => `<details${i === 0 ? ' open' : ''}><summary>${esc(f.q)}</summary><p>${esc(f.a)}</p></details>`).join('');
-  return pageHero(ctx, 'Questions fréquentes', c.faqIntro) + `<section class="section"><div class="wrap faq">${items}</div></section>` + ctaBlock(ctx);
+  const b = blocsEditeur(ctx);
+  return b('tete', pageHero(ctx, 'Questions fréquentes', c.faqIntro)) + b('faq', `<section class="section"><div class="wrap faq">${items}</div></section>`) + b('cta', ctaBlock(ctx));
 }
 
 function contactBody(ctx) {
@@ -1105,7 +1163,8 @@ function contactBody(ctx) {
   const submit = { devis: 'Envoyer ma demande de devis', reservation: 'Envoyer ma demande de réservation', message: 'Envoyer le message' }[mode];
   const formTitle = { devis: 'Votre demande de devis', reservation: 'Réserver', message: 'Écrivez-nous' }[mode];
   const form = `<form class="form" data-mailto="${esc(brief.email || '')}" data-subject="${subject}"><h2 style="font-size:1.6rem;margin:0">${esc(c.contact?.formTitle || formTitle)}</h2><div class="row"><div class="field"><label for="f-name">Nom</label><input id="f-name" name="Nom" required autocomplete="name"></div><div class="field"><label for="f-phone">Téléphone</label><input id="f-phone" name="Téléphone" type="tel" autocomplete="tel"></div></div><div class="field"><label for="f-email">E-mail</label><input id="f-email" name="E-mail" type="email" required autocomplete="email"></div>${booking ? `<div class="row"><div class="field"><label for="f-date">Date souhaitée</label><input id="f-date" name="Date souhaitée" type="date"></div><div class="field"><label for="f-time">Heure</label><input id="f-time" name="Heure" type="time"></div></div>` : ''}${quote && svcOptions ? `<div class="field"><label for="f-svc">Prestation concernée</label><select id="f-svc" name="Prestation">${svcOptions}<option>Autre</option></select></div>` : ''}<div class="field"><label for="f-msg">Message</label><textarea id="f-msg" name="Message" rows="5" required></textarea></div><button class="btn" type="submit">${submit}</button><p class="form-ok" role="status">Merci ! Votre messagerie va s’ouvrir avec votre message prêt à envoyer.</p></form>`;
-  return pageHero(ctx, c.contact?.title || 'Contact', c.contact?.intro) + `<section class="section"><div class="wrap contact-grid"><div class="contact-list">${info.join('')}</div>${form}</div></section>`;
+  const b = blocsEditeur(ctx);
+  return b('tete', pageHero(ctx, c.contact?.title || 'Contact', c.contact?.intro)) + b('contact', `<section class="section"><div class="wrap contact-grid"><div class="contact-list">${info.join('')}</div>${form}</div></section>`);
 }
 
 function legalBody(ctx) {
@@ -1162,8 +1221,12 @@ function favicon(name, t) {
   return 'data:image/svg+xml,' + encodeURIComponent(svg);
 }
 
-export function renderPage(slug, { brief, content, model, images, mode = 'preview', imageSize = 'full', jour }) {
-  const ctx = makeCtx({ brief, content, model, images, mode, page: slug, imageSize, jour });
+// Aperçu de l'éditeur : survol et section choisie bien visibles, clic = choisir la section
+const EDITEUR_CSS = `[data-ed]{cursor:pointer;position:relative}[data-ed]:hover{outline:2px dashed #3b6cf6;outline-offset:-2px}[data-ed][data-ed-choisi]{outline:3px solid #3b6cf6;outline-offset:-3px}[data-ed]:hover::before,[data-ed][data-ed-choisi]::before{content:attr(data-ed-nom);position:absolute;top:0;left:0;z-index:60;background:#3b6cf6;color:#fff;font:600 12px/1 system-ui,sans-serif;padding:6px 9px;border-radius:0 0 6px 0;pointer-events:none}`;
+const EDITEUR_SCRIPT = `(function(){var d=document;d.addEventListener('click',function(e){var s=e.target.closest('[data-ed]');if(!s)return;e.preventDefault();e.stopPropagation();parent.postMessage({type:'ed-choisir',id:s.getAttribute('data-ed')},'*');},true);addEventListener('message',function(e){if(e.source!==parent||!e.data||e.data.type!=='ed-voir')return;var s=d.querySelector('[data-ed="'+String(e.data.id).replace(/"/g,'')+'"]');if(s){s.scrollIntoView({block:'center',behavior:e.data.doux?'smooth':'auto'});parent.postMessage({type:'ed-vu',id:e.data.id},'*');}});})();`;
+
+export function renderPage(slug, { brief, content, model, images, mode = 'preview', imageSize = 'full', jour, editeur = null }) {
+  const ctx = makeCtx({ brief, content, model, images, mode, page: slug, imageSize, jour, editeur: mode === 'preview' ? editeur : null });
   const { arch, t, m, name, pages } = ctx;
   let body;
   switch (slug) {
@@ -1195,7 +1258,10 @@ export function renderPage(slug, { brief, content, model, images, mode = 'previe
   const stripes = arch.stripes ? '<div class="stripes"></div>' : '';
   const mise = m.mise ? ` tt-${m.mise.tetes} ry-${m.mise.rythme} tr-${m.mise.trame}${m.mise.deco ? ' deco-' + m.mise.deco : ''}` : '';
   const badge = m.mise?.deco === 'badge' ? badgeTournant(ctx) : '';
-  return `<!doctype html><html lang="fr" class="a-${arch.id}${m.flavor ? ' fl-' + m.flavor.id : ''} nav-${m.variants.nav}${mise}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title><meta name="description" content="${esc(String(description).slice(0, 160))}"><link rel="icon" href="${favicon(name, t)}"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="${fontsHref(arch)}"><style>${cssVars(arch, t)}${BASE_CSS}${arch.css}${m.comp.css || ''}${m.mise ? MISE_CSS : ''}${ESPACE_CSS}${annoncesCss(ctx)}</style></head><body><a class="skip" href="#main">Aller au contenu</a>${annoncesBar(ctx)}${header(ctx)}<main id="main">${body}</main>${stripes}${footer(ctx)}${shop}${badge}<script>${SCRIPT(mode !== 'export', ctx.jour)}</script></body></html>`;
+  // Une page d'accueil réorganisée dans l'éditeur peut recevoir les modules récents : leurs styles suivent
+  const avecMise = Boolean(m.mise || content.edition?.accueil);
+  const outils = ctx.editeur ? `<style>${EDITEUR_CSS}</style><script>${EDITEUR_SCRIPT}</script>` : '';
+  return `<!doctype html><html lang="fr" class="a-${arch.id}${m.flavor ? ' fl-' + m.flavor.id : ''} nav-${m.variants.nav}${mise}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title><meta name="description" content="${esc(String(description).slice(0, 160))}"><link rel="icon" href="${favicon(name, t)}"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="${fontsHref(arch)}"><style>${cssVars(arch, t)}${BASE_CSS}${arch.css}${m.comp.css || ''}${avecMise ? MISE_CSS : ''}${ESPACE_CSS}${annoncesCss(ctx)}</style></head><body><a class="skip" href="#main">Aller au contenu</a>${annoncesBar(ctx)}${header(ctx)}<main id="main">${body}</main>${stripes}${footer(ctx)}${shop}${badge}<script>${SCRIPT(mode !== 'export', ctx.jour)}</script>${outils}</body></html>`;
 }
 
 export function allPageSlugs(brief, content) {

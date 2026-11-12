@@ -182,7 +182,7 @@ export const POST = route(async (req, { id }) => {
       if (!proposer && publicationsDuJour(e0) >= LIMITE_JOUR) return limite();
       let res = null;
       const rec2 = await updateClient(id, (r) => {
-        res = preparerEtat(r, { etat: body.etat, base: body.base });
+        res = preparerEtat(r, { etat: body.etat, base: body.base, sansEditeur: role === 'client' && !e0.editeur });
         if (Object.keys(res.erreurs).length || !res.changements.length) return null;
         if (proposer) {
           const e = espaceDe(r);
@@ -309,6 +309,20 @@ export const POST = route(async (req, { id }) => {
         if (!e.proposition) return null;
         e.proposition = null;
         noter(e, `Proposition retirée par ${owner}`);
+        r.espace = e;
+        return r;
+      });
+      return json({ espace: vue(rec2 || rec) });
+    }
+
+    case 'editeurClient': {
+      if (role !== 'agence') return fail(403, 'Action réservée à l’agence.', 'interdit');
+      const ouvert = body.ouvert === true;
+      if (ouvert === e0.editeur) return json({ espace: vue(rec) });
+      const rec2 = await updateClient(id, (r) => {
+        const e = espaceDe(r);
+        e.editeur = ouvert;
+        noter(e, ouvert ? `${owner} a ouvert l’éditeur « Mise en page et textes » au client` : `${owner} a refermé l’éditeur « Mise en page et textes » au client`);
         r.espace = e;
         return r;
       });
