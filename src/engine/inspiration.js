@@ -1,6 +1,7 @@
 // Inspiration : vocabulaire commun à l'agent (serveur), à la génération et à l'écran agence.
 // Rien ici ne touche au réseau : utilisable partout.
 import { ARCHETYPES } from './archetypes.js';
+import { TRAMES_INSPIRATION } from './trames.js';
 
 // Fonctionnalités repérées sur les sites visités (et proposées au client si elles lui servent)
 export const FONCTIONNALITES = [
@@ -148,15 +149,21 @@ export function pistesTexte(pistes) {
       "Idées de présentation ou d'interaction originales vues sur ces sites, à adapter si elles servent ce client :\n" +
         trouvailles.map((t) => `- ${String(t.titre).slice(0, 80)}${t.idee ? ' : ' + String(t.idee).slice(0, 180) : ''}`).join('\n')
     );
-  const eviter = (pistes.aEviter || []).map((x) => String(x || '').trim()).filter(Boolean).slice(0, 5);
-  if (eviter.length) L.push('À éviter : ' + eviter.map((x) => x.slice(0, 140)).join(' ; '));
+  // Les atouts des sites analysés, réunis : chaque proposition en reprend le meilleur, à sa façon
+  const atouts = (pistes.atouts || []).map((x) => String(x || '').trim()).filter(Boolean).slice(0, 8);
+  if (atouts.length) L.push('Les atouts des meilleurs sites de son métier, à réunir dans ses propositions (chacune à sa façon) :\n' + atouts.map((x) => '- ' + x.slice(0, 200)).join('\n'));
   if (pistes.siteActuel) L.push('Site actuel du client (son identité à respecter) : ' + String(pistes.siteActuel).slice(0, 300));
   if (!L.length) return '';
   return `<inspiration>
-Pistes tirées de l'analyse de sites remarquables du même métier (et du site actuel du client s'il en a un) :
+Pistes tirées de la bibliothèque d'inspiration de l'agence : les avantages de sites remarquables du même métier (et du site actuel du client s'il en a un), réunis :
 ${L.join('\n')}
 </inspiration>
-Ces pistes sont une source d'idées, jamais un modèle à copier : ne reprends aucun texte, slogan, nom, prix ou élément propre à ces sites. Le brief reste la seule source des faits : n'annonce aucun service, aucune fonctionnalité (réservation, livraison, carte cadeau…) et aucun engagement que le brief ne mentionne pas.`;
+Réunis ces avantages dans tes propositions : ce sont des idées, jamais un modèle à copier. Ne reprends aucun texte, slogan, nom, prix ou élément propre à ces sites. Le brief reste la seule source des faits : n'annonce aucun service, aucune fonctionnalité (réservation, livraison, carte cadeau…) et aucun engagement que le brief ne mentionne pas.`;
+}
+
+// Agencements de page d'accueil conseillés par les pistes (donnés aux premiers modèles générés)
+export function tramesDesPistes(pistes) {
+  return [...new Set((pistes?.trames || []).map((t) => (typeof t === 'string' ? t : t?.trame)).filter((t) => TRAMES_INSPIRATION.includes(t)))].slice(0, 4);
 }
 
 // ---------- Collecte en amont (bibliothèque remplie à l'avance, sans client) ----------

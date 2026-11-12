@@ -13,7 +13,7 @@ import SendBox from './SendBox.jsx';
 import { etatClient, aujourdhuiParis, euros, nomMois } from '../../engine/finances.js';
 import { remoteExtra } from '../RemoteMedia.jsx';
 import { ThumbFrame, DeviceFrame, DeviceToggle, PageTabs } from '../Frames.jsx';
-import { Generating, PreviewModal, ImageStatus, archName, varyModel, nextPalette } from '../App.jsx';
+import { Generating, PreviewModal, ImageStatus, archName, varyModel, nextPalette, MiseLabel } from '../App.jsx';
 import { emptyBrief, remoteSteps, missingLegal, SECTORS, GOALS, PAGES, FEATURES, LEGAL_FORMS } from '../../engine/questions.js';
 import { MOODS } from '../../engine/archetypes.js';
 import { renderPage, sitePages } from '../../engine/render.js';
@@ -111,6 +111,7 @@ function SelectCard({ model, index, html, picked, onToggle, onOpen, onVary, onPa
           <h3>{archName(model)}</h3>
         </div>
         {model.why && <p>{model.why}</p>}
+        <MiseLabel model={model} />
         <div className="model-actions">
           <button type="button" className={`btn small ${picked ? 'primary' : 'secondary'}`} aria-pressed={picked} onClick={onToggle} disabled={!picked && full}>
             {picked ? 'Retenu' : 'Retenir'}

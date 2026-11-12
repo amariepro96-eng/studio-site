@@ -2,7 +2,8 @@
 import { ARCHETYPES, ARCHETYPE_MAP } from './archetypes.js';
 import { COMPOSITIONS, DECO_SHAPES, DIVIDER_PATHS } from './compositions.js';
 import { flavorOf, applyFlavor, applyFlavorComp } from './flavors.js';
-import { BASE_CSS, ESPACE_CSS } from './css.js';
+import { BASE_CSS, ESPACE_CSS, MISE_CSS } from './css.js';
+import { miseValide, modulesDeTrame, HEROS_MISE, herosDuStyle } from './trames.js';
 import { art } from './art.js';
 import { icon } from './icons.js';
 import { esc, rng, pick, formatPrice, priceNumber, slugify, lines, hashString } from './util.js';
@@ -26,20 +27,29 @@ export function resolveModel(model) {
   const rand = rng(seed * 131 + arch.id.length * 7 + 3);
   const choose = (list) => (seed === 0 ? list[0] : pick(list, rand));
   const variants = {};
-  const pools = { ...arch.variants, hero: comp.heroes };
-  for (const [k, list] of Object.entries(pools)) variants[k] = model.variants?.[k] || choose(list);
+  // Mise en page propre à ce modèle dans sa génération (trames.js) ; absente sur les sites d'avant
+  const mise = miseValide(model.mise) ? model.mise : null;
+  const pools = { ...arch.variants, hero: mise ? herosDuStyle(arch.id, comp.heroes) : comp.heroes };
+  for (const [k, list] of Object.entries(pools)) variants[k] = model.variants?.[k] || (k === 'hero' && mise?.hero && list.includes(mise.hero) ? mise.hero : choose(list));
   // Recette : l'enchaînement des sections de la page d'accueil
-  const recipeIndex = seed === 0 ? 0 : Math.floor(rand() * comp.recipes.length) % comp.recipes.length;
-  const tokens = comp.recipes[recipeIndex].map((tok) => {
-    const [name, pool] = tok.split(':');
-    return { name, v: pool ? choose(pool.split('|')) : '' };
-  });
+  let tokens;
+  let recipeIndex = 0;
+  if (mise) {
+    tokens = modulesDeTrame(mise.trame, comp, choose);
+    variants.trame = mise.trame;
+  } else {
+    recipeIndex = seed === 0 ? 0 : Math.floor(rand() * comp.recipes.length) % comp.recipes.length;
+    tokens = comp.recipes[recipeIndex].map((tok) => {
+      const [name, pool] = tok.split(':');
+      return { name, v: pool ? choose(pool.split('|')) : '' };
+    });
+  }
   variants.recipe = recipeIndex;
   variants.sections = tokens.map((x) => x.name + (x.v ? ':' + x.v : '')).join(',');
   const offerTok = tokens.find((x) => x.name === 'offer');
   const offerVariant = offerTok?.v || variants.services;
   const paletteIndex = Number.isInteger(model.paletteIndex) ? model.paletteIndex : seed % arch.palettes.length;
-  return { ...model, seed, arch, comp, flavor, variants, tokens, offerVariant, paletteIndex };
+  return { ...model, seed, arch, comp, flavor, variants, tokens, offerVariant, paletteIndex, mise };
 }
 
 export function computeTheme(arch, paletteIndex, brandColor) {
@@ -361,6 +371,7 @@ function hero(ctx) {
   const actions = `<div class="hero-actions"><a class="btn" ${cta.href}>${esc(cta.label)}</a>${sc ? `<a class="btn ghost" ${sc.href}>${esc(sc.label)}</a>` : ''}</div>`;
   const text = `<h1>${h}</h1><p class="lead">${sub}</p>${actions}`;
   const dc = deco(ctx, 'hero');
+  if (HEROS_MISE.includes(v)) return heroTendance(ctx, v, { h, sub, actions, dc });
   switch (v) {
     case 'overlay':
       return `<section class="hero hero-overlay"><div class="hero-bg visual">${visualInner(take(1, 'hero-bg')[0])}</div><div class="wrap hero-inner">${text}</div></section>`;
@@ -389,7 +400,54 @@ function hero(ctx) {
 }
 
 function heroBg(v) {
-  return ['overlay', 'cover', 'panel'].includes(v) ? 'image' : 'bg';
+  return ['overlay', 'cover', 'panel', 'pied', 'diptyque', 'affiche'].includes(v) ? 'image' : 'bg';
+}
+
+// Mot géant calé exactement sur la largeur (nom en bandeau, en pied, en contour…) : texte SVG dont
+// la longueur est imposée, quelle que soit la police du style. Décoratif : le nom est aussi dans l'en-tête.
+function motGeant(texte, classe = '') {
+  const mot = String(texte || '').trim().toLocaleUpperCase('fr');
+  if (!mot) return '';
+  const fs = Math.round(1000 / (Math.max(3, mot.length) * 0.62));
+  const h = Math.round(fs * 0.9);
+  return `<svg class="mot-geant ${classe}" viewBox="0 0 1000 ${h}" preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false"><text x="0" y="${Math.round(fs * 0.8)}" textLength="1000" lengthAdjust="spacingAndGlyphs" style="font-size:${fs}px">${esc(mot)}</text></svg>`;
+}
+
+// Hauts de page inspirés de sites tendance (bandeau-titre, nom en deux, capsule, diptyque, nom en
+// pied, objet seul, arche, affiche). Réservés aux modèles générés avec une mise en page.
+function heroTendance(ctx, v, { h, sub, actions, dc }) {
+  const { take, visual, visualInner, name } = ctx;
+  const nom = esc(name);
+  switch (v) {
+    case 'masthead':
+      return `<section class="hero hero-masthead">${dc}<div class="wrap">${motGeant(name, 'mast-nom')}<div class="mast-ligne"><h1>${h}</h1><div><p class="lead">${sub}</p>${actions}</div></div>${visual('mast-visual', take(1, 'hero')[0])}</div></section>`;
+    case 'scinde': {
+      const mots = String(name).split(/\s+/).filter(Boolean);
+      const coupe = Math.max(1, Math.ceil(mots.length / 2));
+      const [a, b] = mots.length > 1 ? [mots.slice(0, coupe).join(' '), mots.slice(coupe).join(' ')] : [name, ''];
+      return `<section class="hero hero-scinde">${dc}<div class="wrap">${motGeant(a, 'sc-mot sc-a')}<div class="sc-milieu">${visual('sc-visual', take(1, 'hero')[0])}<div class="sc-texte"><h1>${h}</h1><p class="lead">${sub}</p>${actions}</div></div>${b ? motGeant(b, 'sc-mot sc-b') : ''}</div></section>`;
+    }
+    case 'capsule':
+      return `<section class="hero hero-capsule">${dc}<div class="wrap"><div class="capsule"><div class="capsule-img visual">${visualInner(take(1, 'hero-bg')[0])}</div><div class="capsule-txt"><span class="orn" aria-hidden="true">• • • • • •</span><h1>${h}</h1><span class="orn" aria-hidden="true">• • • • • •</span></div></div><div class="capsule-pied"><p class="lead">${sub}</p>${actions}</div></div></section>`;
+    case 'diptyque': {
+      const s = take(2, 'duo');
+      return `<section class="hero hero-diptyque"><div class="dip-img visual">${visualInner(s[0])}</div><div class="dip-img visual">${visualInner(s[1])}</div><div class="dip-carte"><p class="dip-nom">${nom}</p><h1>${h}</h1><p class="lead">${sub}</p>${actions}</div></section>`;
+    }
+    case 'pied':
+      return `<section class="hero hero-pied"><div class="hero-bg visual">${visualInner(take(1, 'hero-bg')[0])}</div><div class="wrap hero-inner"><div class="pied-haut"><h1>${h}</h1><div><p class="lead">${sub}</p>${actions}</div></div>${motGeant(name, 'pied-nom')}</div></section>`;
+    case 'objet':
+      return `<section class="hero hero-objet">${dc}<div class="wrap"><p class="objet-nom">${nom}</p>${visual('objet-visual', take(1, 'hero')[0])}<div class="objet-texte"><h1>${h}</h1><p class="lead">${sub}</p>${actions}</div></div></section>`;
+    case 'arche':
+      return `<section class="hero hero-arche">${dc}<div class="wrap hero-inner"><div><h1>${h}</h1><p class="lead">${sub}</p>${actions}</div><div class="arche">${visual('arche-visual', take(1, 'hero')[0])}<span class="arche-sceau" aria-hidden="true">${nom}</span></div></div></section>`;
+    case 'affiche': {
+      // Tous les mots du titre restent : un titre long passe simplement un cran plus petit
+      const mots = String(h).replace(/<[^>]+>/g, '').split(/\s+/).filter(Boolean);
+      const lignes = mots.map((m, i) => (i % 3 === 2 ? `<span class="contour">${m}</span>` : m)).join(' ');
+      return `<section class="hero hero-affiche"><div class="wrap"><h1 class="affiche-titre${mots.length > 8 ? ' affiche-long' : ''}">${lignes}</h1><div class="affiche-bas"><div><p class="lead">${sub}</p>${actions}</div>${visual('affiche-visual', take(1, 'hero')[0])}</div></div></section>`;
+    }
+    default:
+      return '';
+  }
 }
 
 function marquee(ctx) {
@@ -483,6 +541,12 @@ function servicesPreview(ctx, alt, v) {
   const more = has('services')
     ? `<div class="more"><a class="link-arrow" ${link('services')}>${all.length > limit ? 'Tout voir' : 'En savoir plus'} ${icon('arrow', { size: 18 })}</a></div>`
     : '';
+  if (v === 'index') {
+    const lignes = all.slice(0, 8)
+      .map((x, i) => `<li class="idx-ligne"><span class="idx-num">${String(i + 1).padStart(2, '0')}</span><span class="idx-nom">${esc(x.name)}</span><span class="idx-info">${esc(String(x.desc || x.description || '').slice(0, 90))}${x.price !== null && x.price !== undefined && x.price !== '' ? `<strong>${esc(formatPrice(x.price))}</strong>` : ''}</span></li>`)
+      .join('');
+    return `<section class="${sec(alt, 'idx-sec')}"><div class="wrap">${sectionHead(c.servicesTitle || servicesLabel(brief), c.servicesIntro, false)}<ol class="idx-liste">${lignes}</ol>${more}</div></section>`;
+  }
   return `<section class="${sec(alt)}"><div class="wrap">${sectionHead(c.servicesTitle || servicesLabel(brief), c.servicesIntro, false)}${servicesList(ctx, items, v)}${more}</div></section>`;
 }
 
@@ -545,11 +609,11 @@ function aboutTeaser(ctx, alt, v) {
 function gallery(ctx, alt, v = 'grid', { title } = {}) {
   const { imgs, content: c } = ctx;
   if (imgs.length < 3) return '';
-  const want = { masonry: 6, grid: 6, strip: 8, polaroid: 5, bento: 4 }[v] || 6;
+  const want = { masonry: 6, grid: 6, strip: 8, polaroid: 5, bento: 4, asym: 5, eventail: 6 }[v] || 6;
   let slots = ctx.takeDistinct(want, 'gallery');
   if (v === 'grid' && slots.length > 3 && slots.length < 6) slots = slots.slice(0, 3);
   const ratios = ['4/5', '1/1', '3/4', '4/3', '1/1', '4/5'];
-  const showCap = v === 'polaroid' || v === 'masonry';
+  const showCap = v === 'polaroid' || v === 'masonry' || v === 'eventail';
   const items = slots
     .map((sl, i) => {
       const cap = showCap ? caption(ctx.imgAt(sl)) : '';
@@ -702,6 +766,179 @@ function cartUi(ctx) {
   return `<button class="btn cart-fab" type="button" data-cart-open>${icon('bag', { size: 18 })}Panier <span class="cart-count" data-cart-count>0</span></button><div class="cart-overlay" data-cart-close></div><aside class="cart-drawer" aria-label="Panier"><div class="cart-head"><h2>Votre panier</h2><button class="icon-btn" type="button" data-cart-close aria-label="Fermer le panier">${icon('close', { size: 22 })}</button></div><div class="cart-body" data-cart-lines></div><form class="cart-foot" data-checkout data-mailto="${esc(brief.email || '')}" data-subject="Nouvelle commande"><div class="cart-total"><span>Total</span><span data-cart-total>0 €</span></div><div class="field"><label for="co-name">Nom</label><input id="co-name" name="Nom" required autocomplete="name"></div><div class="field"><label for="co-email">E-mail</label><input id="co-email" type="email" name="E-mail" required autocomplete="email"></div><div class="field"><label for="co-addr">Adresse de livraison</label><input id="co-addr" name="Adresse" autocomplete="street-address"></div><button class="btn" type="submit">Envoyer ma commande</button><p class="form-note">Votre commande sera envoyée par e-mail à ${esc(name)}, qui vous recontactera pour le paiement et la livraison.</p><p class="form-ok" role="status">Votre commande est prête : votre messagerie va s’ouvrir pour l’envoyer.</p></form></aside>`;
 }
 
+// ---------- Modules inspirés de sites tendance ----------
+// Une phrase avec de petites photos glissées entre les mots
+function motsImages(ctx, alt) {
+  const c = ctx.content;
+  const texte = String(c.statement || c.about?.quote || c.brand?.tagline || '').trim();
+  const mots = texte.split(/\s+/).filter(Boolean);
+  if (mots.length < 6 || ctx.imgs.length < 2) return '';
+  const s = ctx.take(2, 'mots');
+  const pastille = (sl) => `<span class="mi-img visual" aria-hidden="true">${ctx.visualInner(sl)}</span>`;
+  const i1 = Math.round(mots.length / 3);
+  const i2 = Math.round((mots.length * 2) / 3);
+  const html = mots.map((m, i) => (i === i1 ? pastille(s[0]) + ' ' : i === i2 ? pastille(s[1]) + ' ' : '') + esc(m)).join(' ');
+  return `<section class="${sec(alt, 'mots-images')}"><div class="wrap"><p class="mi-texte">${html}</p></div></section>`;
+}
+
+// Deux portes : deux grandes images côte à côte vers les deux offres principales
+function portes(ctx, alt) {
+  const { content: c, brief, has, link } = ctx;
+  // Deux entrées vers le reste du site (l'offre, l'histoire ou la visite) : la liste détaillée de l'offre
+  // suit déjà sur la page, les portes ne la répètent pas
+  const sv = (c.services || []).filter((x) => x?.name);
+  const offre = {
+    titre: c.servicesTitle || servicesLabel(brief),
+    texte: sv.length ? sv.slice(0, 3).map((x) => x.name).join(' · ') : c.servicesIntro || '',
+    href: has('services') ? link('services') : link('contact'),
+  };
+  const histoire = c.about?.intro && has('a-propos') ? { titre: c.about?.title || 'Notre histoire', texte: c.about.intro, href: link('a-propos') } : null;
+  const visite = { titre: 'Nous rendre visite', texte: [brief.address, brief.hours].filter(Boolean).join(' · '), href: link('contact') };
+  const items = [offre, histoire || visite];
+  if (ctx.imgs.length < 2) return '';
+  const s = ctx.take(2, 'portes');
+  return `<section class="${sec(alt, 'portes-sec')}"><div class="wrap portes">${items
+    .map((x, i) => `<a class="porte" ${x.href}><span class="porte-img visual">${ctx.visualInner(s[i])}</span><span class="porte-txt"><span class="porte-titre">${esc(x.titre)}</span>${x.texte ? `<span class="porte-texte">${esc(String(x.texte).slice(0, 110))}</span>` : ''}<span class="porte-lien">Découvrir ${icon('arrow', { size: 18 })}</span></span></a>`)
+    .join('')}</div></section>`;
+}
+
+// Manifeste : bande de la couleur principale, grand texte en capitales
+function manifeste(ctx) {
+  const c = ctx.content;
+  const texte = c.about?.quote || c.statement || c.brand?.tagline;
+  if (!texte) return '';
+  const intro = c.about?.intro ? `<p class="mf-intro">${esc(String(c.about.intro).slice(0, 320))}</p>` : '';
+  return `<section class="manifeste"><div class="wrap"><span class="mf-etiquette">${esc(c.about?.title || 'Notre engagement')}</span><p class="mf-texte">${esc(texte)}</p><span class="mf-orn" aria-hidden="true">✳ ✳ ✳</span>${intro}</div></section>`;
+}
+
+// Le nom en très grand, en contour, sur toute la largeur
+function grandMot(ctx, alt) {
+  const { name, content: c } = ctx;
+  return `<section class="${sec(alt, 'grand-mot')}"><div class="wrap">${motGeant(name, 'gm-mot')}${c.brand?.tagline ? `<p class="gm-ligne">${esc(c.brand.tagline)}</p>` : ''}</div></section>`;
+}
+
+// ---------- Modules de mise en page : deux blocs côte à côte, sommaire du site ----------
+// Chaque demi-bloc est une version compacte d'un module ; s'il manque de quoi le remplir, l'autre
+// moitié est affichée seule, en module complet.
+function demiBloc(ctx, kind) {
+  const { content: c, brief, has, link } = ctx;
+  switch (kind) {
+    case 'about': {
+      const a = c.about || {};
+      if (!a.intro && !a.title) return '';
+      const more = has('a-propos') ? `<a class="link-arrow" ${link('a-propos')}>Notre histoire ${icon('arrow', { size: 18 })}</a>` : '';
+      return `<h2>${esc(a.title || 'Qui sommes-nous')}</h2><p class="lead">${esc(a.intro || '')}</p>${more}`;
+    }
+    case 'highlights': {
+      const items = (c.highlights || []).slice(0, 4);
+      if (!items.length) return '';
+      return `<h2>${esc(c.highlightsTitle || 'Ce qui fait la différence')}</h2><ul class="duo-list">${items
+        .map((it) => `<li><span class="f-icon">${icon(it.icon, { size: 22 })}</span><div><h3>${esc(it.title)}</h3><p>${esc(it.text)}</p></div></li>`)
+        .join('')}</ul>`;
+    }
+    case 'reviews': {
+      const reviews = parseReviews(brief.reviews).slice(0, 2);
+      if (!reviews.length) return '';
+      return `<h2>Ils nous font confiance</h2><div class="duo-reviews">${reviews
+        .map((r) => `<figure class="review"><blockquote>« ${esc(r.text)} »</blockquote>${r.author ? `<figcaption>${esc(r.author)}</figcaption>` : ''}</figure>`)
+        .join('')}</div>`;
+    }
+    case 'info': {
+      const items = [];
+      if (brief.address) items.push(`<li><span class="f-icon">${icon('pin', { size: 20 })}</span><div><h3>Adresse</h3><a href="${mapsHref(brief.address)}" target="_blank" rel="noopener">${esc(brief.address)}</a></div></li>`);
+      if (brief.hours) items.push(`<li><span class="f-icon">${icon('clock', { size: 20 })}</span><div><h3>Horaires</h3><p>${multi(brief.hours)}</p></div></li>`);
+      if (brief.phone) items.push(`<li><span class="f-icon">${icon('phone', { size: 20 })}</span><div><h3>Téléphone</h3><a href="${telHref(brief.phone)}">${esc(brief.phone)}</a></div></li>`);
+      if (brief.email) items.push(`<li><span class="f-icon">${icon('mail', { size: 20 })}</span><div><h3>E-mail</h3><a href="mailto:${esc(brief.email)}">${esc(brief.email)}</a></div></li>`);
+      if (items.length < 2) return '';
+      return `<h2>Infos pratiques</h2><ul class="duo-list">${items.join('')}</ul>`;
+    }
+    case 'process': {
+      const p = c.process;
+      const steps = (p?.steps || []).filter((x) => x && x.title).slice(0, 4);
+      if (steps.length < 2) return '';
+      return `<h2>${esc(p.title || 'Comment ça se passe')}</h2><ol class="steps steps-stack">${steps
+        .map((st, i) => `<li class="step"><span class="step-num">${i + 1}</span><div><h3>${esc(st.title)}</h3>${st.text ? `<p>${esc(st.text)}</p>` : ''}</div></li>`)
+        .join('')}</ol>`;
+    }
+    case 'statement': {
+      const text = c.statement || c.about?.quote || c.brand?.short;
+      return text ? `<p class="statement-text">${esc(text)}</p>` : '';
+    }
+    case 'visual':
+      return ctx.visual('duo-visual', ctx.take(1, 'duo')[0]);
+    default:
+      return '';
+  }
+}
+
+// Module complet correspondant (quand l'autre moitié du duo est vide)
+function moduleSeul(ctx, kind, alt) {
+  switch (kind) {
+    case 'about':
+      return aboutTeaser(ctx, alt, 'split');
+    case 'highlights':
+      return highlights(ctx, alt);
+    case 'reviews':
+      return reviewsBlock(ctx, alt);
+    case 'info':
+      return infoStrip(ctx, alt);
+    case 'process':
+      return processBlock(ctx, alt, 'line');
+    case 'statement':
+      return statement(ctx, alt, 'left');
+    default:
+      return '';
+  }
+}
+
+function duo(ctx, alt, v) {
+  const [a, b] = String(v || '').split('+');
+  const ha = demiBloc(ctx, a);
+  const hb = demiBloc(ctx, b);
+  // Une photo seule ne suffit pas : il faut au moins une moitié avec du contenu
+  const texte = (h, k) => Boolean(h) && k !== 'visual';
+  if (!texte(ha, a) && !texte(hb, b)) return '';
+  // Une moitié vide : l'autre est affichée seule, en module complet
+  if (!ha) return moduleSeul(ctx, b, alt);
+  if (!hb) return moduleSeul(ctx, a, alt);
+  return cellsDuo(ha, a, hb, b, alt);
+}
+
+function cellsDuo(ha, a, hb, b, alt) {
+  const cell = (h, k) => `<div class="duo-cell duo-${k}">${h}</div>`;
+  return `<section class="${sec(alt, `duo-sec duo-${a}-${b}`)}"><div class="wrap duo">${cell(ha, a)}${cell(hb, b)}</div></section>`;
+}
+
+// Sommaire : les pages du site en grandes tuiles numérotées
+function sommaire(ctx, alt) {
+  const { content: c, pages, link, brief } = ctx;
+  const texte = {
+    services: c.servicesIntro || (c.services || []).slice(0, 3).map((s) => s.name).join(' · '),
+    boutique: c.productsIntro || (c.products || []).slice(0, 3).map((x) => x.name).join(' · '),
+    'a-propos': c.about?.intro || c.about?.title || '',
+    faq: (c.faq || [])[0]?.q || (c.faq || [])[0]?.question || 'Les réponses à vos questions',
+    contact: [brief.address, brief.phone].filter(Boolean).join(' · ') || 'Nous écrire',
+  };
+  const tuiles = pages.filter((p) => p.slug !== 'index');
+  if (tuiles.length < 3) return '';
+  return `<section class="${sec(alt, 'sommaire-sec')}"><div class="wrap"><nav class="sommaire" aria-label="Sommaire">${tuiles
+    .map(
+      (p, i) =>
+        `<a class="som-tuile" ${link(p.slug)}><span class="som-num">${String(i + 1).padStart(2, '0')}</span><span class="som-titre">${esc(p.label)}</span><span class="som-texte">${esc(String(texte[p.slug] || '').slice(0, 120))}</span><span class="som-fleche">${icon('arrow', { size: 20 })}</span></a>`
+    )
+    .join('')}</nav></div></section>`;
+}
+
+// Badge rond qui tourne doucement, en bas de l'écran : l'action principale (réserver, appeler…)
+function badgeTournant(ctx) {
+  const cta = primaryCta(ctx);
+  const mot = esc(String(cta.label).toUpperCase());
+  const unite = `${mot} · `;
+  const boucle = unite.repeat(Math.max(1, Math.round(26 / unite.length)));
+  const cote = ctx.brief.siteType === 'boutique' ? ' badge-gauche' : '';
+  return `<a class="badge-tournant${cote}" ${cta.href} aria-label="${esc(cta.label)}"><svg viewBox="0 0 120 120" aria-hidden="true"><defs><path id="bt-cercle" d="M60,60 m-46,0 a46,46 0 1,1 92,0 a46,46 0 1,1 -92,0"/></defs><text><textPath href="#bt-cercle" textLength="286" lengthAdjust="spacing">${boucle}</textPath></text></svg><span class="bt-coeur">${icon('arrow', { size: 22 })}</span></a>`;
+}
+
 // ---------- Pages complètes ----------
 
 // Assemblage de la page d'accueil selon la recette du style
@@ -720,12 +957,16 @@ function homeBody(ctx) {
     out.push(html);
     prev = bg;
   };
+  // Rythme de la mise en page : bandes alternées (par défaut), filets (fond uni), panneaux (tous « alt »)
+  const rythme = m.mise?.rythme || 'bandes';
   const plain = (fn) => {
-    const html = fn(altNext);
+    const alt = rythme === 'filets' ? false : rythme === 'cartes' ? true : altNext;
+    const html = fn(alt);
     if (!html) return;
-    push(html, altNext ? 'surface' : 'bg');
+    push(html, alt ? 'surface' : 'bg');
     altNext = !altNext;
   };
+  const offreIndex = m.tokens.some((t) => t.name === 'offer' && t.v === 'index');
   for (const { name, v } of m.tokens) {
     switch (name) {
       case 'hero': {
@@ -750,7 +991,19 @@ function homeBody(ctx) {
         plain((alt) => (shop ? productsPreview(ctx, alt) : servicesPreview(ctx, alt, v)));
         break;
       case 'offer2':
-        if (shop) plain((alt) => servicesPreview(ctx, alt, m.variants.services));
+        if (shop) plain((alt) => servicesPreview(ctx, alt, offreIndex ? 'index' : m.variants.services));
+        break;
+      case 'motsimages':
+        plain((alt) => motsImages(ctx, alt));
+        break;
+      case 'portes':
+        plain((alt) => portes(ctx, alt));
+        break;
+      case 'manifeste':
+        push(manifeste(ctx), 'image');
+        break;
+      case 'grandmot':
+        plain((alt) => grandMot(ctx, alt));
         break;
       case 'gallery':
         plain((alt) => gallery(ctx, alt, v || 'grid'));
@@ -776,6 +1029,12 @@ function homeBody(ctx) {
       }
       case 'info':
         plain((alt) => infoStrip(ctx, alt));
+        break;
+      case 'duo':
+        plain((alt) => duo(ctx, alt, v));
+        break;
+      case 'sommaire':
+        plain((alt) => sommaire(ctx, alt));
         break;
       default:
         break;
@@ -934,7 +1193,9 @@ export function renderPage(slug, { brief, content, model, images, mode = 'previe
   const description = content.seo?.description || content.brand?.short || brief.description || '';
   const shop = brief.siteType === 'boutique' && (content.products || []).length ? cartUi(ctx) : '';
   const stripes = arch.stripes ? '<div class="stripes"></div>' : '';
-  return `<!doctype html><html lang="fr" class="a-${arch.id}${m.flavor ? ' fl-' + m.flavor.id : ''} nav-${m.variants.nav}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title><meta name="description" content="${esc(String(description).slice(0, 160))}"><link rel="icon" href="${favicon(name, t)}"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="${fontsHref(arch)}"><style>${cssVars(arch, t)}${BASE_CSS}${arch.css}${m.comp.css || ''}${ESPACE_CSS}${annoncesCss(ctx)}</style></head><body><a class="skip" href="#main">Aller au contenu</a>${annoncesBar(ctx)}${header(ctx)}<main id="main">${body}</main>${stripes}${footer(ctx)}${shop}<script>${SCRIPT(mode !== 'export', ctx.jour)}</script></body></html>`;
+  const mise = m.mise ? ` tt-${m.mise.tetes} ry-${m.mise.rythme} tr-${m.mise.trame}${m.mise.deco ? ' deco-' + m.mise.deco : ''}` : '';
+  const badge = m.mise?.deco === 'badge' ? badgeTournant(ctx) : '';
+  return `<!doctype html><html lang="fr" class="a-${arch.id}${m.flavor ? ' fl-' + m.flavor.id : ''} nav-${m.variants.nav}${mise}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title><meta name="description" content="${esc(String(description).slice(0, 160))}"><link rel="icon" href="${favicon(name, t)}"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="${fontsHref(arch)}"><style>${cssVars(arch, t)}${BASE_CSS}${arch.css}${m.comp.css || ''}${m.mise ? MISE_CSS : ''}${ESPACE_CSS}${annoncesCss(ctx)}</style></head><body><a class="skip" href="#main">Aller au contenu</a>${annoncesBar(ctx)}${header(ctx)}<main id="main">${body}</main>${stripes}${footer(ctx)}${shop}${badge}<script>${SCRIPT(mode !== 'export', ctx.jour)}</script></body></html>`;
 }
 
 export function allPageSlugs(brief, content) {

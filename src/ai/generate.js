@@ -77,7 +77,7 @@ async function runStep(part, brief, runner, { signal, onPart }) {
 export async function generateSite(brief, runner, { onPart, signal, done = {} } = {}) {
   if (!runner) {
     for (const p of PARTS) onPart?.(p, 'done');
-    return { content: demoContent(brief), models: conceptsToModels(demoConcepts(brief)), source: 'demo', warnings: [] };
+    return { content: demoContent(brief), models: conceptsToModels(demoConcepts(brief), brief), source: 'demo', warnings: [] };
   }
   const results = { ...done };
   for (const p of PARTS) if (results[p]) onPart?.(p, 'done');
@@ -93,7 +93,7 @@ export async function generateSite(brief, runner, { onPart, signal, done = {} } 
   }
   return {
     content: normalizeContent(results.core, results.pages, brief),
-    models: conceptsToModels(normalizeConcepts(results.concepts, brief)),
+    models: conceptsToModels(normalizeConcepts(results.concepts, brief), brief, { trames: results.concepts?.tramesConseillees }),
     source: 'ai',
     warnings: [],
   };

@@ -22,6 +22,7 @@ import {
 } from '../engine/inspiration.js';
 import { SECTORS, sectorLabel } from '../engine/questions.js';
 import { ARCHETYPES, MOODS } from '../engine/archetypes.js';
+import { TRAMES_INSPIRATION, DESCRIPTIONS_TRAMES } from '../engine/trames.js';
 import { parseJsonLoose } from '../engine/util.js';
 
 export const MAX_SITES_CLIENT = 4; // sites cités par le client
@@ -268,7 +269,7 @@ export async function rechercherPourCollecte({ metier, specialite = '', angle = 
 const SCHEMA_ANALYSE = {
   type: 'object',
   additionalProperties: false,
-  required: ['nom', 'metier', 'specialite', 'resume', 'ambiance', 'palette', 'typographies', 'miseEnPage', 'fonctionnalites', 'trouvailles', 'idees', 'pointsFaibles', 'styleProche', 'note', 'originalite', 'identite'],
+  required: ['nom', 'metier', 'specialite', 'resume', 'ambiance', 'palette', 'typographies', 'miseEnPage', 'trameProche', 'fonctionnalites', 'trouvailles', 'idees', 'atouts', 'styleProche', 'note', 'originalite', 'identite'],
   properties: {
     nom: { type: 'string' },
     metier: { type: 'string', enum: SECTORS.map((s) => s.id) },
@@ -281,7 +282,8 @@ const SCHEMA_ANALYSE = {
     fonctionnalites: { type: 'array', items: { type: 'string', enum: IDS_FONCTIONNALITES } },
     trouvailles: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['titre', 'description'], properties: { titre: { type: 'string' }, description: { type: 'string' } } } },
     idees: { type: 'array', items: { type: 'string' } },
-    pointsFaibles: { type: 'array', items: { type: 'string' } },
+    atouts: { type: 'array', items: { type: 'string' } },
+    trameProche: { type: 'string', enum: TRAMES_INSPIRATION },
     styleProche: { type: 'string', enum: ARCHETYPE_IDS },
     note: { type: 'integer' },
     originalite: { type: 'integer' },
@@ -289,21 +291,22 @@ const SCHEMA_ANALYSE = {
   },
 };
 
-const SYSTEM_ANALYSE = `Tu es directeur artistique dans une agence web française. Tu analyses le site d'une entreprise à partir de captures d'écran et d'un relevé technique, pour en tirer de l'inspiration : ce qui le rend réussi (ou non), son style, ses fonctionnalités. Tu décris des idées réutilisables, jamais des éléments à copier (pas de slogan, de texte, de nom ni de logo à reprendre).
+const SYSTEM_ANALYSE = `Tu es directeur artistique dans une agence web française. Tu analyses le site d'une entreprise à partir de captures d'écran et d'un relevé technique, pour en tirer de l'inspiration : ce qui le rend réussi (ou non), son style, ses fonctionnalités. Tu décris des idées réutilisables, jamais des éléments à copier (pas de slogan, de texte, de nom ni de logo à reprendre). Tu ne relèves que ce que le site fait bien : ses avantages, pas ses défauts.
 
 Réponds uniquement en JSON :
 - nom : le nom de l'entreprise tel qu'il apparaît.
 - metier : l'identifiant du métier de l'entreprise, parmi : ${SECTORS.map((s) => `${s.id} (${s.label})`).join(', ')}.
 - specialite : sa spécialité précise en 2 à 5 mots (ex. « pizzeria napolitaine », « plombier chauffagiste », « photographe de mariage »).
-- resume : 2 phrases : ce que fait ce site de bien (ou de mal), concrètement.
+- resume : 2 phrases : ce que ce site fait de bien, concrètement.
 - ambiance : 3 à 5 mots ou courtes expressions (ex. « minimaliste », « chaleureux », « photo plein écran »).
 - palette : 3 à 6 couleurs dominantes en hexadécimal, chacune avec son usage (fond, texte, accent, boutons…).
 - typographies : style des titres et du texte, en mots simples (ex. « serif fine et élégante », « sans-serif géométrique grasse »), sans deviner de nom de police.
 - miseEnPage : 3 à 6 observations sur la mise en page (haut de page, enchaînement des sections, menu, mobile).
+- trameProche : l'agencement de sa page d'accueil le plus proche, parmi : ${TRAMES_INSPIRATION.map((t) => `${t} (${DESCRIPTIONS_TRAMES[t]})`).join(', ')}.
 - fonctionnalites : celles réellement présentes, parmi : ${FONCTIONNALITES.map((f) => `${f.id} (${f.label})`).join(', ')}.
 - trouvailles : 0 à 4 fonctionnalités ou façons de présenter qui sortent de l'ordinaire et pourraient servir à d'autres entreprises (ex. « Configurateur de bouquet en 3 étapes », « Carte des chantiers réalisés », « Horaires qui indiquent "ouvert maintenant" »). Pour chacune : un titre court et une phrase qui décrit comment c'est fait. Rien de banal (pas « formulaire de contact », pas « galerie photo » sans originalité).
 - idees : 3 à 6 idées concrètes qu'une agence pourrait réutiliser pour un autre client de ce métier, formulées comme des idées (ex. « Afficher les horaires du jour dès le haut de page »).
-- pointsFaibles : 0 à 3 défauts à ne pas reproduire.
+- atouts : 2 à 5 avantages de ce site, formulés comme des qualités à reprendre (ex. « La carte se lit d'un coup d'œil sur téléphone », « Les photos montrent le vrai lieu et l'équipe »).
 - styleProche : la direction artistique de Studio Site la plus proche, parmi : ${ARCHETYPES.map((a) => `${a.id} (${a.name})`).join(', ')}.
 - note : de 1 à 5, l'intérêt de ce site comme source d'inspiration (5 = remarquable).
 - originalite : de 1 à 5, à quel point le site est authentique et unique : 5 = identité visuelle propre, mise en page pensée pour cette entreprise, vraies photos, ton personnel ; 1 = thème générique, photos de banque d'images, texte passe-partout.
@@ -355,7 +358,8 @@ export async function analyserVisite(visite, { brief, source }) {
     fonctionnalites: [...new Set((Array.isArray(data?.fonctionnalites) ? data.fonctionnalites : []).filter((f) => IDS_FONCTIONNALITES.includes(f)))],
     trouvailles: (Array.isArray(data?.trouvailles) ? data.trouvailles : []).map((t) => ({ titre: S(t?.titre, 70), description: S(t?.description, 240) })).filter((t) => t.titre).slice(0, 4),
     idees: liste(data?.idees, 6, 220),
-    pointsFaibles: liste(data?.pointsFaibles, 3, 200),
+    atouts: liste(data?.atouts, 5, 200),
+    trameProche: TRAMES_INSPIRATION.includes(data?.trameProche) ? data.trameProche : '',
     styleProche: ARCHETYPE_IDS.includes(data?.styleProche) ? data.styleProche : '',
     note: Math.max(1, Math.min(5, Math.round(Number(data?.note) || 3))),
     originalite: Math.max(1, Math.min(5, Math.round(Number(data?.originalite) || 3))),
@@ -367,7 +371,7 @@ export async function analyserVisite(visite, { brief, source }) {
 const SCHEMA_PISTES = {
   type: 'object',
   additionalProperties: false,
-  required: ['resume', 'stylesConseilles', 'fonctionnalites', 'trouvailles', 'idees', 'ton', 'aEviter', 'siteActuel'],
+  required: ['resume', 'stylesConseilles', 'trames', 'fonctionnalites', 'trouvailles', 'atouts', 'idees', 'ton', 'siteActuel'],
   properties: {
     resume: { type: 'string' },
     stylesConseilles: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['archetype', 'pourquoi'], properties: { archetype: { type: 'string', enum: ARCHETYPE_IDS }, pourquoi: { type: 'string' } } } },
@@ -375,7 +379,8 @@ const SCHEMA_PISTES = {
     trouvailles: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['titre', 'idee'], properties: { titre: { type: 'string' }, idee: { type: 'string' } } } },
     idees: { type: 'array', items: { type: 'string' } },
     ton: { type: 'string' },
-    aEviter: { type: 'array', items: { type: 'string' } },
+    atouts: { type: 'array', items: { type: 'string' } },
+    trames: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['trame', 'pourquoi'], properties: { trame: { type: 'string', enum: TRAMES_INSPIRATION }, pourquoi: { type: 'string' } } } },
     siteActuel: { type: 'string' },
   },
 };
@@ -393,8 +398,9 @@ export async function synthetiser(brief, fiches) {
         a.fonctionnalites?.length ? `Fonctionnalités : ${a.fonctionnalites.join(', ')}` : '',
         a.trouvailles?.length ? `Trouvailles : ${a.trouvailles.map((t) => `${t.titre} (${t.description})`).join(' ; ')}` : '',
         a.miseEnPage?.length ? `Mise en page : ${a.miseEnPage.join(' ; ')}` : '',
+        a.trameProche ? `Agencement de la page d'accueil : ${a.trameProche}` : '',
+        a.atouts?.length ? `Atouts : ${a.atouts.join(' ; ')}` : '',
         a.idees?.length ? `Idées : ${a.idees.join(' ; ')}` : '',
-        a.pointsFaibles?.length ? `Défauts : ${a.pointsFaibles.join(' ; ')}` : '',
         a.identite ? `Identité à garder : ${a.identite}` : '',
       ]
         .filter(Boolean)
@@ -402,7 +408,7 @@ export async function synthetiser(brief, fiches) {
     })
     .join('\n\n');
   const deja = [...new Set([...(brief.features || []), ...(brief.pages || [])])].join(', ') || 'aucune';
-  const prompt = `Voici le brief d'un client et l'analyse de sites qui peuvent l'inspirer. Rédige des pistes concrètes pour créer SON site : personnel, authentique, adapté à son métier et à ce qu'il a écrit. Les sites sont des sources d'idées, jamais des modèles à copier.
+  const prompt = `Voici le brief d'un client et l'analyse de sites qui peuvent l'inspirer. Rédige des pistes concrètes pour créer SON site : personnel, authentique, adapté à son métier et à ce qu'il a écrit. Réunis les avantages de ces sites (uniquement leurs points forts, jamais leurs défauts) : ce sont des sources d'idées, jamais des modèles à copier.
 
 <client>
 ${resumeBrief(brief)}
@@ -420,7 +426,8 @@ Réponds uniquement en JSON :
 - trouvailles : 0 à 4 fonctionnalités ou façons de présenter originales vues sur ces sites qui serviraient vraiment CE client, chacune avec un titre court et une phrase qui dit comment l'adapter à son site. Uniquement ce qui est compatible avec son brief.
 - idees : 6 à 10 idées de sections, de contenus ou d'angles pour SON site, concrètes et adaptées à ce qu'il a écrit (ex. « Une section "La journée au fournil" avec 3 étapes en photos »). Aucune idée ne doit supposer un fait absent du brief (prix, label, année, livraison…).
 - ton : le ton et le vocabulaire qui marchent dans ce métier, en une phrase.
-- aEviter : 2 à 5 erreurs vues sur ces sites à ne pas reproduire.
+- atouts : 4 à 8 avantages des sites analysés, réunis et formulés pour SON site : ce que ses modèles doivent reprendre à leur façon (ex. « Des photos du vrai lieu dès le haut de page », « La carte lisible en un coup d'œil sur téléphone »). Que des points forts, compatibles avec son brief.
+- trames : 2 à 4 agencements de page d'accueil, ceux des sites les plus réussis qui conviennent le mieux à son activité, du plus adapté au moins adapté, chacun avec une raison courte. Agencements : ${TRAMES_INSPIRATION.map((t) => `${t} (${DESCRIPTIONS_TRAMES[t]})`).join(', ')}.
 - siteActuel : si un SITE ACTUEL DU CLIENT figure dans la liste, ce qu'il faut garder de son identité, en une phrase ; sinon chaîne vide.`;
   const data = await demanderJson(client, { max_tokens: 3000, messages: [{ role: 'user', content: prompt }] }, SCHEMA_PISTES, 'rédiger les pistes');
   const styles = [];
@@ -438,7 +445,12 @@ Réponds uniquement en JSON :
     trouvailles: (Array.isArray(data?.trouvailles) ? data.trouvailles : []).map((t) => ({ titre: S(t?.titre, 70), idee: S(t?.idee, 220) })).filter((t) => t.titre).slice(0, 4),
     idees: liste(data?.idees, 10, 220),
     ton: S(data?.ton, 300),
-    aEviter: liste(data?.aEviter, 5, 200),
+    atouts: liste(data?.atouts, 8, 200),
+    trames: (() => {
+      const out = [];
+      for (const x of Array.isArray(data?.trames) ? data.trames : []) if (TRAMES_INSPIRATION.includes(x?.trame) && !out.some((t) => t.trame === x.trame)) out.push({ trame: x.trame, pourquoi: S(x.pourquoi, 160) });
+      return out.slice(0, 4);
+    })(),
     siteActuel: S(data?.siteActuel, 300),
   };
 }
@@ -460,6 +472,7 @@ export function entreeIndex(fiche, metiers = [], avant = null) {
     originalite: a.originalite || 0,
     ambiance: (a.ambiance || []).slice(0, 4),
     styleProche: a.styleProche || '',
+    trameProche: a.trameProche || '',
     fonctionnalites: a.fonctionnalites || [],
     trouvailles: (a.trouvailles || []).map((t) => t.titre).filter(Boolean).slice(0, 4),
     vignette: (fiche.captures || []).find((c) => c.nom === 'ecran')?.id || fiche.captures?.[0]?.id || '',

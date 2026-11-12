@@ -6,7 +6,7 @@ import { validatePart } from '../../../src/engine/validate.js';
 import { parseJsonLoose } from '../../../src/engine/util.js';
 import { config, rateLimited, clientIp, cleanBrief } from '../../../src/server/config.js';
 import { getClient, validId } from '../../../src/server/store.js';
-import { pistesTexte } from '../../../src/engine/inspiration.js';
+import { pistesTexte, tramesDesPistes } from '../../../src/engine/inspiration.js';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -80,9 +80,11 @@ export async function POST(req) {
 
   // Dossier client : les pistes de l'agent d'inspiration (si elles sont prêtes) enrichissent les consignes
   let inspiration = '';
+  let tramesConseillees = [];
   if (validId(body?.dossier)) {
     const rec = await getClient(body.dossier).catch(() => null);
     inspiration = pistesTexte(rec?.inspiration?.pistes);
+    tramesConseillees = tramesDesPistes(rec?.inspiration?.pistes);
   }
   const prompt = buildPrompt(part, brief, { inspiration });
   const schema = schemaFor(part, brief);
@@ -111,7 +113,8 @@ export async function POST(req) {
         throw e;
       }
       problems = validatePart(part, data, brief);
-      if (!problems.length) return Response.json({ data });
+      // Agencements des meilleurs sites de la bibliothèque : donnés aux premiers modèles (trames.js)
+      if (!problems.length) return Response.json({ data: part === 'concepts' && tramesConseillees.length ? { ...data, tramesConseillees } : data });
       console.warn('[generate]', part, 'réponse incomplète :', problems.join(' ; '));
     }
     return fail(422, `La réponse de l’IA était incomplète (${problems.join(' ; ')}).`, 'incomplete');

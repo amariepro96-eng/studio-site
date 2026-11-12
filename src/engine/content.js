@@ -2,7 +2,9 @@
 // et choix des 10 directions artistiques les plus adaptées.
 import { ARCHETYPES, ARCHETYPE_MAP } from './archetypes.js';
 import { ICON_NAMES, hasIcon } from './icons.js';
-import { lines, rng, clampText, priceNumber, uid } from './util.js';
+import { lines, rng, clampText, priceNumber, uid, hashString } from './util.js';
+import { COMPOSITIONS } from './compositions.js';
+import { repartirMises, herosDuStyle } from './trames.js';
 
 const SECTOR_KIT = {
   restaurant: {
@@ -236,7 +238,7 @@ export function parseOfferLines(text) {
       }
       const inline = name.match(/^(.*?)\s+(\d+(?:[.,]\d+)?)\s*€\s*$/);
       if (inline && price === null) {
-        name = inline[1];
+        name = inline[1].replace(/\s*[:–—-]\s*$/, '');
         price = inline[2] + ' €';
       }
       return { name, price, description: rest.join(' — ') };
@@ -531,6 +533,11 @@ export function normalizeContent(core, pages, brief) {
   };
 }
 
-export function conceptsToModels(concepts) {
-  return concepts.map((c) => ({ id: uid(), seed: 0, ...c }));
+// Chaque modèle reçoit sa propre mise en page (trames.js) : ordre des modules, place des titres,
+// rythme et haut de page diffèrent d'un modèle à l'autre de la même génération.
+// trames : agencements conseillés par la bibliothèque d'inspiration, donnés aux premiers modèles.
+export function conceptsToModels(concepts, brief = {}, { trames = [] } = {}) {
+  const graine = (hashString(`${brief.businessName || ''}|${brief.sector || ''}|${brief.city || ''}`) % 9973) + 1;
+  const mises = repartirMises(concepts.length, { graine, heroes: (i) => herosDuStyle(concepts[i]?.archetype, COMPOSITIONS[concepts[i]?.archetype]?.heroes || []), preferees: trames });
+  return concepts.map((c, i) => ({ id: uid(), seed: 0, mise: mises[i], ...c }));
 }

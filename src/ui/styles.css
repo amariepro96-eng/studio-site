@@ -1178,6 +1178,12 @@ body {
   gap: 8px;
   flex: 1;
 }
+.ss .model-info p.model-mise {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--accent);
+  margin-top: 4px;
+}
 .model-info p {
   color: var(--muted);
   font-size: 0.93rem;
@@ -7727,6 +7733,13 @@ fieldset.dv-bloc legend + * {
   width: 100%;
   cursor: pointer;
   border-radius: var(--radius-sm);
+  padding: 8px 10px;
+}
+.insp-compteur-ligne {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(60px, 1fr) auto;
+  gap: 12px;
+  align-items: center;
   padding: 8px 10px;
 }
 .insp-compteurs button {

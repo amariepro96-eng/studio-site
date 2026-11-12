@@ -4,6 +4,19 @@ import { emptyBrief, STEPS } from '../engine/questions.js';
 import { ARCHETYPE_MAP } from '../engine/archetypes.js';
 import { modelName, insertVersions, versionsOf, baseOf, versionLabel } from '../engine/variants.js';
 import { renderPage, sitePages, resolveModel } from '../engine/render.js';
+import { varierMise, nomMise } from '../engine/trames.js';
+
+// Mise en page d'un modèle (vue agence) : « Récit · inspirée de ta bibliothèque »
+export function MiseLabel({ model }) {
+  const nom = nomMise(model?.mise);
+  if (!nom) return null;
+  return (
+    <p className="model-mise">
+      Mise en page : {nom}
+      {model.mise.bibliotheque ? ' · inspirée de ta bibliothèque' : ''}
+    </p>
+  );
+}
 import { buildZip, zipName } from '../engine/zip.js';
 import { generateSite, PART_LABELS } from '../ai/generate.js';
 import { PARTS } from '../engine/prompts.js';
@@ -31,6 +44,11 @@ export const archName = (m) => modelName(m);
 
 // Nouvelle mise en page pour le même modèle (on garde la palette)
 export function varyModel(m) {
+  // Modèle avec sa propre mise en page : autre trame, autres titres, autre rythme
+  if (m.mise) {
+    const paletteIndex = m.paletteIndex ?? resolveModel(m).paletteIndex;
+    return { ...m, seed: (m.seed || 0) + 1, variants: undefined, paletteIndex, mise: varierMise(m.mise) };
+  }
   const current = JSON.stringify(resolveModel(m).variants);
   const paletteIndex = m.paletteIndex ?? resolveModel(m).paletteIndex;
   for (let s = (m.seed || 0) + 1; s < (m.seed || 0) + 25; s++) {
@@ -139,6 +157,7 @@ function ModelCard({ model, index, brief, content, images, agency, onOpen, onCho
           <h3>{archName(model)}</h3>
         </div>
         {model.why && <p>{model.why}</p>}
+        {agency && <MiseLabel model={model} />}
         <div className="model-actions">
           <button type="button" className="btn secondary small" onClick={onOpen}>
             Voir en grand

@@ -3,6 +3,7 @@
 // Les textes restent ceux du modèle d'origine.
 import { ARCHETYPE_MAP } from './archetypes.js';
 import { FLAVORS, BASE_LABELS, flavorOf } from './flavors.js';
+import { miseDeVersion } from './trames.js';
 
 export const VERSION_COUNT = 4;
 
@@ -35,6 +36,8 @@ export function versionsOf(base) {
     seed: 0,
     paletteIndex: 0,
     variants: undefined,
+    // Chaque version a aussi sa propre mise en page (modèles générés depuis la mise à jour « trames »)
+    mise: miseDeVersion(base.mise, k + 1),
   }));
   return [base, ...extra];
 }

@@ -6,6 +6,7 @@ import { api } from '../api.js';
 import { AgencyBar, Spinner } from '../Chrome.jsx';
 import { SECTORS } from '../../engine/questions.js';
 import { FONCTIONNALITES, DANS_LE_BRIEF, labelFonctionnalite, nomArchetype } from '../../engine/inspiration.js';
+import { TRAME_MAP, TRAMES_INSPIRATION } from '../../engine/trames.js';
 import { SOURCES, vignette } from './InspirationDossier.jsx';
 import Collecte from './Collecte.jsx';
 
@@ -110,6 +111,16 @@ function Fiche({ id, usage = 0, onFermer, onRetire }) {
                   ))}
                 </ul>
               )}
+              {a.atouts?.length > 0 && (
+                <>
+                  <h3>Ses atouts</h3>
+                  <ul className="insp-liste">
+                    {a.atouts.map((x, i) => (
+                      <li key={i}>{x}</li>
+                    ))}
+                  </ul>
+                </>
+              )}
               {a.palette?.length > 0 && (
                 <>
                   <h3>Couleurs</h3>
@@ -136,6 +147,11 @@ function Fiche({ id, usage = 0, onFermer, onRetire }) {
               {a.styleProche && (
                 <p className="small">
                   <strong>Style proche dans Studio Site :</strong> {nomArchetype(a.styleProche)}
+                </p>
+              )}
+              {TRAME_MAP[a.trameProche] && (
+                <p className="small">
+                  <strong>Mise en page proche :</strong> {TRAME_MAP[a.trameProche].label}
                 </p>
               )}
               {a.miseEnPage?.length > 0 && (
@@ -176,16 +192,6 @@ function Fiche({ id, usage = 0, onFermer, onRetire }) {
                   <h3>Idées à retenir</h3>
                   <ul className="insp-liste">
                     {a.idees.map((x, i) => (
-                      <li key={i}>{x}</li>
-                    ))}
-                  </ul>
-                </>
-              )}
-              {a.pointsFaibles?.length > 0 && (
-                <>
-                  <h3>À ne pas reproduire</h3>
-                  <ul className="insp-liste">
-                    {a.pointsFaibles.map((x, i) => (
                       <li key={i}>{x}</li>
                     ))}
                   </ul>
@@ -234,6 +240,10 @@ function Catalogue({ sites, onFonction, onOuvrir }) {
   const comptes = FONCTIONNALITES.map((f) => ({ ...f, n: sites.filter((s) => (s.fonctionnalites || []).includes(f.id)).length }))
     .filter((f) => f.n > 0)
     .sort((a, b) => b.n - a.n);
+  const meilleurs = sites.filter((s) => (s.note || 0) >= 4);
+  const mises = TRAMES_INSPIRATION.map((id) => ({ id, label: TRAME_MAP[id].label, n: meilleurs.filter((s) => s.trameProche === id).length }))
+    .filter((x) => x.n > 0)
+    .sort((a, b) => b.n - a.n);
   const trouvailles = [];
   for (const s of sites) for (const t of s.trouvailles || []) trouvailles.push({ titre: t, site: s });
   trouvailles.sort((a, b) => (b.site.originalite || 0) - (a.site.originalite || 0) || (b.site.note || 0) - (a.site.note || 0));
@@ -264,6 +274,25 @@ function Catalogue({ sites, onFonction, onOuvrir }) {
           ))}
         </ul>
       </section>
+      {mises.length > 0 && (
+        <section>
+          <h2>Mises en page des meilleurs sites</h2>
+          <p className="muted small">Sur les sites notés 4 ou 5. Les agencements les plus fréquents d’un métier sont conseillés aux premiers modèles générés pour ses clients.</p>
+          <ul className="insp-compteurs">
+            {mises.map((x) => (
+              <li key={x.id}>
+                <span className="insp-compteur-ligne">
+                  <span className="insp-compteur-nom">{x.label}</span>
+                  <span className="insp-compteur-barre" aria-hidden="true">
+                    <span style={{ width: `${Math.max(4, Math.round((x.n / mises[0].n) * 100))}%` }} />
+                  </span>
+                  <span className="insp-compteur-n">{x.n}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       <section>
         <h2>Trouvailles originales</h2>
         <p className="muted small">Les idées qui sortent de l’ordinaire, relevées par l’agent. Touche une ligne pour voir le site.</p>

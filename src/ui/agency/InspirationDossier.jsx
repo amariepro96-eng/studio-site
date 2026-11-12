@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { STATUTS_INSPIRATION, labelFonctionnalite, nomArchetype, dejaDansLeBrief } from '../../engine/inspiration.js';
+import { TRAME_MAP } from '../../engine/trames.js';
 
 const fmt = (iso) => (iso ? new Date(iso).toLocaleString('fr-FR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) : '');
 export const SOURCES = { actuel: 'Son site actuel', client: 'Cité par le client', metier: 'Même métier', collecte: 'Collecte' };
@@ -115,6 +116,28 @@ export default function InspirationDossier({ rec }) {
               </ul>
             </>
           )}
+          {p.trames?.length > 0 && (
+            <>
+              <h3>Mises en page conseillées</h3>
+              <ul className="insp-chips">
+                {p.trames.map((t) => (
+                  <li key={t.trame} title={t.pourquoi}>
+                    {TRAME_MAP[t.trame]?.label || t.trame}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          {p.atouts?.length > 0 && (
+            <>
+              <h3>Atouts réunis</h3>
+              <ul className="insp-idees">
+                {p.atouts.map((x, i) => (
+                  <li key={i}>{x}</li>
+                ))}
+              </ul>
+            </>
+          )}
           {p.fonctionnalites?.length > 0 && (
             <>
               <h3>Fonctionnalités utiles</h3>
@@ -160,16 +183,6 @@ export default function InspirationDossier({ rec }) {
             </>
           )}
           {p.siteActuel && <p className="small"><strong>Son site actuel :</strong> {p.siteActuel}</p>}
-          {p.aEviter?.length > 0 && (
-            <details className="insp-eviter">
-              <summary>À éviter ({p.aEviter.length})</summary>
-              <ul>
-                {p.aEviter.map((x, i) => (
-                  <li key={i}>{x}</li>
-                ))}
-              </ul>
-            </details>
-          )}
         </div>
       )}
 
